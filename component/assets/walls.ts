@@ -21,12 +21,15 @@ export const initialPlanePositions = [
 export const wallVertexShader = `
   varying vec3 vWorldPos;
   varying vec3 vViewDir;
+  varying vec4 vProjectedPos;
   
   void main() {
     vec4 worldPos = modelMatrix * vec4(position, 1.0);
     vWorldPos = worldPos.xyz;
     vViewDir = worldPos.xyz - cameraPosition;
-    gl_Position = projectionMatrix * viewMatrix * worldPos;
+    vec4 mvPosition = viewMatrix * worldPos;
+    vProjectedPos = projectionMatrix * mvPosition;
+    gl_Position = vProjectedPos;
   }
 `
 
@@ -45,6 +48,8 @@ export const wallFragmentShader = `
   uniform float uLeftWallVisible;
   uniform float uRightWallVisible;
   uniform vec3 uCameraPos;
+  uniform float uCameraNear;
+  uniform float uCameraFar;
   uniform sampler2D uTexture;
   uniform float uTexRepeat;
   
@@ -56,6 +61,7 @@ export const wallFragmentShader = `
   
   varying vec3 vWorldPos;
   varying vec3 vViewDir;
+  varying vec4 vProjectedPos;
   
   // SDF for thin box with rounded edges (모서리가 둥근 박스)
   float sdRoundBox(vec3 p, vec3 b, float r) {
@@ -291,6 +297,15 @@ export const wallFragmentShader = `
       col = sqrt(col);
       
       alpha = 1.0;
+      
+      // Calculate proper depth
+      // t is world-space distance, convert to NDC depth
+      float linearDepth = t;
+      float ndc = (uCameraFar + uCameraNear - 2.0 * uCameraNear * uCameraFar / linearDepth) / (uCameraFar - uCameraNear);
+      gl_FragDepth = (ndc + 1.0) * 0.5;
+    } else {
+      // No hit - use far plane depth
+      gl_FragDepth = 1.0;
     }
     
     gl_FragColor = vec4(col, alpha);

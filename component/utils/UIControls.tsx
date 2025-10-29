@@ -6,13 +6,23 @@ interface UIControlsProps {
   onAddSphere: () => void
   onDeleteSphere: (id: string) => void
   onToggleOperation: (id: string) => void
+  onConfirmColliders?: () => void
+  onAddBox?: () => void
+  collidersConfirmed?: boolean
+  showColliderWireframe?: boolean
+  onToggleColliderWireframe?: () => void
 }
 
 export function UIControls({
   spheres,
   onAddSphere,
   onDeleteSphere,
-  onToggleOperation
+  onToggleOperation,
+  onConfirmColliders,
+  onAddBox,
+  collidersConfirmed = false,
+  showColliderWireframe = true,
+  onToggleColliderWireframe
 }: UIControlsProps) {
   return (
     <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-none">
@@ -31,8 +41,11 @@ export function UIControls({
                 <div className="flex gap-2">
                   <button
                     onClick={() => onToggleOperation(sphere.id)}
+                    disabled={collidersConfirmed}
                     className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                      sphere.operation === 'union'
+                      collidersConfirmed
+                        ? 'bg-gray-500 cursor-not-allowed text-gray-300'
+                        : sphere.operation === 'union'
                         ? 'bg-green-500 hover:bg-green-600 text-white'
                         : 'bg-red-500 hover:bg-red-600 text-white'
                     }`}
@@ -41,7 +54,12 @@ export function UIControls({
                   </button>
                   <button
                     onClick={() => onDeleteSphere(sphere.id)}
-                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md font-medium transition-colors"
+                    disabled={collidersConfirmed}
+                    className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                      collidersConfirmed
+                        ? 'bg-gray-500 cursor-not-allowed text-gray-300'
+                        : 'bg-gray-600 hover:bg-gray-700 text-white'
+                    }`}
                   >
                     Delete
                   </button>
@@ -51,19 +69,60 @@ export function UIControls({
           </div>
         )}
         
-        {/* Add Sphere Button */}
-        <div className="flex justify-center">
+        {/* Control Buttons */}
+        <div className="flex justify-center gap-3">
           <button
             onClick={onAddSphere}
-            disabled={spheres.length >= MAX_SPHERES}
+            disabled={spheres.length >= MAX_SPHERES || collidersConfirmed}
             className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-              spheres.length >= MAX_SPHERES
+              spheres.length >= MAX_SPHERES || collidersConfirmed
                 ? 'bg-gray-500 cursor-not-allowed text-gray-300'
                 : 'bg-blue-500 hover:bg-blue-600 text-white'
             }`}
           >
-            Add Sphere {spheres.length >= MAX_SPHERES && '(Max Reached)'}
+            Add Sphere {spheres.length >= MAX_SPHERES ? '(Max Reached)' : collidersConfirmed ? '(Locked)' : ''}
           </button>
+          
+          {onConfirmColliders && (
+            <button
+              onClick={onConfirmColliders}
+              disabled={collidersConfirmed}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                collidersConfirmed
+                  ? 'bg-green-500 text-white cursor-not-allowed'
+                  : 'bg-purple-500 hover:bg-purple-600 text-white'
+              }`}
+            >
+              {collidersConfirmed ? 'Colliders Active' : 'Confirm Colliders'}
+            </button>
+          )}
+          
+          {onAddBox && (
+            <button
+              onClick={onAddBox}
+              disabled={!collidersConfirmed}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                !collidersConfirmed
+                  ? 'bg-gray-500 cursor-not-allowed text-gray-300'
+                  : 'bg-orange-500 hover:bg-orange-600 text-white'
+              }`}
+            >
+              Add Box
+            </button>
+          )}
+          
+          {onToggleColliderWireframe && collidersConfirmed && (
+            <button
+              onClick={onToggleColliderWireframe}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                showColliderWireframe
+                  ? 'bg-cyan-500 hover:bg-cyan-600 text-white'
+                  : 'bg-gray-600 hover:bg-gray-700 text-white'
+              }`}
+            >
+              {showColliderWireframe ? 'Hide Colliders' : 'Show Colliders'}
+            </button>
+          )}
         </div>
       </div>
     </div>

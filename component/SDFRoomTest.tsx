@@ -11,6 +11,7 @@ interface SDFRoomTestProps {
   selectedSphere: string | null
   onSpherePositionChange: (id: string, position: THREE.Vector3) => void
   onSphereSelect: (id: string | null) => void
+  collidersConfirmed?: boolean
 }
 
 interface SphereVisualizationProps {
@@ -18,9 +19,10 @@ interface SphereVisualizationProps {
   isSelected: boolean
   onSelect: () => void
   onPositionChange: (position: THREE.Vector3) => void
+  collidersConfirmed: boolean
 }
 
-function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange }: SphereVisualizationProps) {
+function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, collidersConfirmed }: SphereVisualizationProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   
   useEffect(() => {
@@ -31,23 +33,22 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange }:
   
   return (
     <group>
+      {/* 항상 보이지 않는 mesh (TransformControls용) */}
       <mesh 
         ref={meshRef}
         position={sphere.position}
         onClick={(e) => {
-          e.stopPropagation()
-          onSelect()
+          if (!collidersConfirmed) {
+            e.stopPropagation()
+            onSelect()
+          }
         }}
+        visible={false}
       >
         <sphereGeometry args={[sphere.radius, 32, 32]} />
-        <meshStandardMaterial 
-          color={sphere.operation === 'union' ? '#00ff00' : '#ff0000'}
-          transparent
-          opacity={0.3}
-          wireframe
-        />
       </mesh>
-      {isSelected && meshRef.current && (
+      
+      {isSelected && meshRef.current && !collidersConfirmed && (
         <TransformControls
           object={meshRef.current}
           mode="translate"
@@ -66,7 +67,8 @@ export function SDFRoomTest({
   spheres, 
   selectedSphere,
   onSpherePositionChange,
-  onSphereSelect
+  onSphereSelect,
+  collidersConfirmed = false
 }: SDFRoomTestProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   
@@ -104,6 +106,9 @@ export function SDFRoomTest({
         uRightWallVisible: { value: 1.0 },
         // 카메라 위치를 uniform으로 전달 (동적 볼륨 크기 계산용)
         uCameraPos: { value: new THREE.Vector3(0, 0, 0) },
+        // 카메라 near/far plane
+        uCameraNear: { value: 0.1 },
+        uCameraFar: { value: 1000.0 },
         // 텍스쳐 관련
         uTexture: { value: cementTexture },
         uTexRepeat: { value: 2.0 },
@@ -116,7 +121,7 @@ export function SDFRoomTest({
       transparent: true,
       vertexShader: wallVertexShader,
       fragmentShader: wallFragmentShader,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
     })
   }, [cementTexture, planePositions])
   
@@ -133,6 +138,10 @@ export function SDFRoomTest({
       
       // 카메라 위치를 uniform에 업데이트 (동적 볼륨 크기 계산용)
       material.uniforms.uCameraPos.value.copy(state.camera.position)
+      
+      // Update camera planes
+      material.uniforms.uCameraNear.value = state.camera.near
+      material.uniforms.uCameraFar.value = state.camera.far
       
       // 카메라 위치 기반으로 벽의 가시성 계산
       const cameraPos = state.camera.position
@@ -171,6 +180,7 @@ export function SDFRoomTest({
           isSelected={selectedSphere === sphere.id}
           onSelect={() => onSphereSelect(sphere.id)}
           onPositionChange={(pos) => onSpherePositionChange(sphere.id, pos)}
+          collidersConfirmed={collidersConfirmed}
         />
       ))}
     </>
