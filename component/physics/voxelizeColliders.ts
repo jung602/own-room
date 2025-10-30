@@ -14,8 +14,15 @@ function sdRoundBox(p: THREE.Vector3, b: THREE.Vector3, r: number): number {
   return Math.min(maxD, 0.0) + maxVec.length() - r
 }
 
-function sdSphere(p: THREE.Vector3, r: number): number {
-  return p.length() - r
+function sdSphere(p: THREE.Vector3, r: number, scale: THREE.Vector3): number {
+  // 비균일 스케일 적용 (shader와 동일한 로직)
+  const scaledP = new THREE.Vector3(
+    p.x / scale.x,
+    p.y / scale.y,
+    p.z / scale.z
+  )
+  const minScale = Math.min(scale.x, Math.min(scale.y, scale.z))
+  return (scaledP.length() - r) * minScale
 }
 
 function opSmoothUnion(d1: number, d2: number, k: number): number {
@@ -70,10 +77,10 @@ export function calculateSceneSDF(
   d = opSmoothUnion(d, leftWall, k)
   d = opSmoothUnion(d, rightWall, k)
 
-  // Sphere 추가
+  // Sphere 추가 (scale 적용)
   for (const sphere of spheres) {
     const sphereP = pos.clone().sub(sphere.position)
-    const sphereDist = sdSphere(sphereP, sphere.radius)
+    const sphereDist = sdSphere(sphereP, sphere.radius, sphere.scale)
 
     if (sphere.operation === 'union') {
       d = opSmoothUnion(d, sphereDist, k)

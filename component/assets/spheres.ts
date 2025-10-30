@@ -5,6 +5,7 @@ export interface Sphere {
   id: string
   position: THREE.Vector3
   radius: number
+  scale: THREE.Vector3
   operation: 'union' | 'subtract'
 }
 
@@ -35,6 +36,7 @@ export function createSphere(id: string): Sphere {
     id,
     position: new THREE.Vector3(0, 0, 0),
     radius: DEFAULT_SPHERE_RADIUS,
+    scale: new THREE.Vector3(1, 1, 1),
     operation: 'union'
   }
 }

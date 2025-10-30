@@ -57,6 +57,7 @@ export const wallFragmentShader = `
   uniform int uSphereCount;
   uniform vec3 uSpherePositions[10];
   uniform float uSphereRadii[10];
+  uniform vec3 uSphereScales[10];
   uniform float uSphereOperations[10]; // 0.0 = union, 1.0 = subtract
   
   varying vec3 vWorldPos;
@@ -75,9 +76,10 @@ export const wallFragmentShader = `
     return min(max(d.x, max(d.y, d.z)), 0.0) + length(max(d, 0.0));
   }
   
-  // SDF for sphere
-  float sdSphere(vec3 p, float r) {
-    return length(p) - r;
+  // SDF for sphere with non-uniform scale
+  float sdSphere(vec3 p, float r, vec3 scale) {
+    vec3 scaledP = p / scale;
+    return (length(scaledP) - r) * min(min(scale.x, scale.y), scale.z);
   }
   
   // Simple Union (without blending)
@@ -188,7 +190,7 @@ export const wallFragmentShader = `
       if(i >= uSphereCount) break;
       
       vec3 sphereP = pos - uSpherePositions[i];
-      float sphere = sdSphere(sphereP, uSphereRadii[i]);
+      float sphere = sdSphere(sphereP, uSphereRadii[i], uSphereScales[i]);
       
       // Check operation: 0.0 = union, 1.0 = subtract
       if(uSphereOperations[i] < 0.5) {

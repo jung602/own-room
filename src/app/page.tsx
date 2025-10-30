@@ -14,6 +14,7 @@ import { DynamicBox } from '../../component/objects/DynamicBox'
 import { useDragDrop } from '../../component/utils/useDragDrop'
 import { initialPlanePositions } from '../../component/assets/walls'
 import { generateVoxelColliders } from '../../component/physics/voxelizeColliders'
+import { BlendFunction } from 'postprocessing'
 
 interface Box {
   id: string
@@ -24,10 +25,13 @@ interface SceneContentProps {
   spheres: Sphere[]
   selectedSphere: string | null
   onSpherePositionChange: (id: string, position: THREE.Vector3) => void
+  onSphereScaleChange: (id: string, scale: THREE.Vector3) => void
   onSphereSelect: (id: string | null) => void
+  onScaleDragChange: (isDragging: boolean) => void
   collidersConfirmed: boolean
   boxes: Box[]
   showColliderWireframe: boolean
+  isScaleDragging: boolean
 }
 
 // Collider wireframe visualization component (Physics 밖에서 렌더링)
@@ -53,10 +57,13 @@ function SceneContent({
   spheres,
   selectedSphere,
   onSpherePositionChange,
+  onSphereScaleChange,
   onSphereSelect,
+  onScaleDragChange,
   collidersConfirmed,
   boxes,
   showColliderWireframe,
+  isScaleDragging,
 }: SceneContentProps) {
   const {
     draggedObjectId,
@@ -107,7 +114,9 @@ function SceneContent({
           spheres={spheres}
           selectedSphere={selectedSphere}
           onSpherePositionChange={onSpherePositionChange}
+          onSphereScaleChange={onSphereScaleChange}
           onSphereSelect={onSphereSelect}
+          onScaleDragChange={onScaleDragChange}
           collidersConfirmed={collidersConfirmed}
         />
         
@@ -126,18 +135,24 @@ function SceneContent({
         ))}
       </PhysicsScene>
       
-      <OrbitControls makeDefault enabled={!draggedObjectId} />
+      <OrbitControls makeDefault enabled={!draggedObjectId && !isScaleDragging} />
       
-      {/* 스크린프린트 스타일 포스트프로세싱 효과 */}
+      {/* 스크린프린트 스타일 포스트프로세싱 효과 
       <EffectComposer>
       <N8AO
-          aoRadius={5}
+          aoRadius={10}
           intensity={5}
-          distanceFalloff={2}
+          distanceFalloff={1}
           halfRes={true}
           quality="performance"
         />
-      </EffectComposer>
+        <Noise
+          blendFunction={BlendFunction.OVERLAY}
+          premultiply={true}
+          opacity={0.1}
+          factor={0.5}
+        />
+      </EffectComposer>*/}
     </>
   )
 }
@@ -148,6 +163,7 @@ export default function App() {
   const [collidersConfirmed, setCollidersConfirmed] = useState(false)
   const [boxes, setBoxes] = useState<Box[]>([])
   const [showColliderWireframe, setShowColliderWireframe] = useState(true)
+  const [isScaleDragging, setIsScaleDragging] = useState(false)
   
   const handleAddSphere = () => {
     if (spheres.length >= MAX_SPHERES) return
@@ -179,6 +195,14 @@ export default function App() {
     ))
   }
   
+  const handleSphereScaleChange = (id: string, newScale: THREE.Vector3) => {
+    setSpheres(spheres.map(sphere => 
+      sphere.id === id 
+        ? { ...sphere, scale: newScale.clone() }
+        : sphere
+    ))
+  }
+  
   const handleConfirmColliders = () => {
     setCollidersConfirmed(true)
   }
@@ -198,15 +222,18 @@ export default function App() {
   
   return (
     <div className="w-full h-screen relative">
-      <Canvas camera={{ position: [0, 50, 100], fov: 10 }} shadows>
+      <Canvas camera={{ position: [0, 50, 100], fov: 5 }} shadows>
         <SceneContent
           spheres={spheres}
           selectedSphere={selectedSphere}
           onSpherePositionChange={handleSpherePositionChange}
+          onSphereScaleChange={handleSphereScaleChange}
           onSphereSelect={setSelectedSphere}
+          onScaleDragChange={setIsScaleDragging}
           collidersConfirmed={collidersConfirmed}
           boxes={boxes}
           showColliderWireframe={showColliderWireframe}
+          isScaleDragging={isScaleDragging}
         />
       </Canvas>
       
