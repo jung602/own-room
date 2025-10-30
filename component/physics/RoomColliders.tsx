@@ -11,9 +11,10 @@ interface RoomCollidersProps {
 
 export function RoomColliders({ spheres }: RoomCollidersProps) {
   // Confirm 시점의 씬을 voxelize하여 box collider들 생성
+  // 더 작은 voxel 크기로 디테일 증가
   const boxColliders = useMemo(() => {
     console.log('Voxelizing scene for colliders...')
-    return generateVoxelColliders(initialPlanePositions, spheres, 0.3)
+    return generateVoxelColliders(initialPlanePositions, spheres, 0.12)
   }, [spheres])
 
   return (

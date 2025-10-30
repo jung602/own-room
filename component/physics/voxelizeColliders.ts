@@ -113,6 +113,9 @@ export function generateVoxelColliders(
   }
 
   // SDF 샘플링하여 내부 voxel 찾기
+  // 표면을 더 정확하게 캡처하기 위해 약간의 오프셋 적용
+  const sdfThreshold = -voxelSize * 0.05 // 표면에 더 가까운 voxel만 포함
+  
   for (let x = 0; x < gridSize.x; x++) {
     voxels[x] = []
     for (let y = 0; y < gridSize.y; y++) {
@@ -125,7 +128,7 @@ export function generateVoxelColliders(
         )
         
         const sdf = calculateSceneSDF(worldPos, wallPositions, spheres)
-        voxels[x][y][z] = sdf < 0 // 내부면 true
+        voxels[x][y][z] = sdf < sdfThreshold // 표면 근처의 내부만 true
       }
     }
   }

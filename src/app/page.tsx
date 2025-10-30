@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
+import { EffectComposer, N8AO, BrightnessContrast, ToneMapping, DotScreen, Noise } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { SDFRoomTest } from '../../component/SDFRoomTest'
 import { UIControls } from '../../component/utils/UIControls'
@@ -41,7 +42,7 @@ function ColliderWireframes({ spheres }: { spheres: Sphere[] }) {
       {boxColliders.map((collider, index) => (
         <mesh key={index} position={collider.position.toArray()}>
           <boxGeometry args={collider.size.toArray()} />
-          <meshBasicMaterial color="#00ffff" wireframe />
+          <meshBasicMaterial color="#cccccc" wireframe />
         </mesh>
       ))}
     </group>
@@ -60,6 +61,7 @@ function SceneContent({
   const {
     draggedObjectId,
     dragPosition,
+    isOutOfBounds,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
@@ -68,7 +70,9 @@ function SceneContent({
   // Add event listeners for drag
   useEffect(() => {
     const handleMove = (e: PointerEvent) => handlePointerMove(e)
-    const handleUp = () => handlePointerUp()
+    const handleUp = () => {
+      handlePointerUp()
+    }
     
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
@@ -82,7 +86,7 @@ function SceneContent({
   return (
     <>
       <color attach="background" args={['#000000']} />
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={1} />
       <directionalLight 
         position={[10, 10, 5]} 
         intensity={1}
@@ -116,12 +120,24 @@ function SceneContent({
             initialPosition={box.initialPosition}
             isDragging={draggedObjectId === box.id}
             dragPosition={dragPosition}
+            isOutOfBounds={draggedObjectId === box.id ? isOutOfBounds : false}
             onPointerDown={handlePointerDown}
           />
         ))}
       </PhysicsScene>
       
       <OrbitControls makeDefault enabled={!draggedObjectId} />
+      
+      {/* 스크린프린트 스타일 포스트프로세싱 효과 */}
+      <EffectComposer>
+      <N8AO
+          aoRadius={5}
+          intensity={5}
+          distanceFalloff={2}
+          halfRes={true}
+          quality="performance"
+        />
+      </EffectComposer>
     </>
   )
 }
@@ -182,7 +198,7 @@ export default function App() {
   
   return (
     <div className="w-full h-screen relative">
-      <Canvas camera={{ position: [0, 4, 8], fov: 50 }} shadows>
+      <Canvas camera={{ position: [0, 50, 100], fov: 10 }} shadows>
         <SceneContent
           spheres={spheres}
           selectedSphere={selectedSphere}

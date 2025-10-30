@@ -267,13 +267,13 @@ export const wallFragmentShader = `
       
       // 기존 렌더링 로직
       // Diffuse lighting
-      float dif = clamp(dot(nor, lig), 0.0, 1.0);
+      float dif = clamp(dot(nor, lig), 0.0, 0.5);
       
       // Soft shadow
       float sha = calcSoftshadow(pos + nor * 0.001, lig, 0.01, 3.0, 16.0);
       
       // Ambient
-      float amb = 0.5 + 0.5 * nor.y;
+      float amb = 1.0 + 1.0 * nor.y;
       
       // Planar UV based on dominant axis of normal
       vec2 uv;
