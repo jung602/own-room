@@ -38,18 +38,7 @@ function createRotationMatrix(euler: THREE.Euler): THREE.Matrix3 {
   return rotZ.multiply(rotY).multiply(rotX)
 }
 
-// SDF 함수들 (셰이더와 동일)
-function sdRoundBox(p: THREE.Vector3, b: THREE.Vector3, r: number): number {
-  const d = new THREE.Vector3(
-    Math.abs(p.x) - b.x,
-    Math.abs(p.y) - b.y,
-    Math.abs(p.z) - b.z
-  )
-  const maxD = Math.max(d.x, Math.max(d.y, d.z))
-  const maxVec = new THREE.Vector3(Math.max(d.x, 0), Math.max(d.y, 0), Math.max(d.z, 0))
-  return Math.min(maxD, 0.0) + maxVec.length() - r
-}
-
+// SDF 함수들 (Shape 전용)
 function sdSphere(p: THREE.Vector3, r: number, scale: THREE.Vector3): number {
   const scaledP = new THREE.Vector3(
     p.x / scale.x,
@@ -162,56 +151,171 @@ function opSmoothSubtraction(d1: number, d2: number, k: number): number {
   return d2 * (1 - h) + (-d1) * h + k * h * (1.0 - h)
 }
 
-// 전체 씬의 SDF 계산
-export function calculateSceneSDF(
-  pos: THREE.Vector3,
-  wallPositions: THREE.Vector3[],
-  shapes: Shape[]
-): number {
-  const k = BLEND_STRENGTH
+// Shape의 bounding box 계산
+interface BoundingBox {
+  min: THREE.Vector3
+  max: THREE.Vector3
+}
+
+function getShapeBounds(shape: Shape): BoundingBox {
+  const maxRadius = shape.radius * Math.max(shape.scale.x, shape.scale.y, shape.scale.z) * 1.5
+  return {
+    min: shape.position.clone().subScalar(maxRadius),
+    max: shape.position.clone().addScalar(maxRadius)
+  }
+}
+
+// Point가 bounding box 안에 있는지 체크
+function isPointInBounds(point: THREE.Vector3, bounds: BoundingBox): boolean {
+  return point.x >= bounds.min.x && point.x <= bounds.max.x &&
+         point.y >= bounds.min.y && point.y <= bounds.max.y &&
+         point.z >= bounds.min.z && point.z <= bounds.max.z
+}
+
+interface BoxCollider {
+  position: THREE.Vector3
+  size: THREE.Vector3
+}
+
+// Wall용 단순 box collider 5개 생성 (rounded 값 포함)
+function createWallColliders(wallPositions: THREE.Vector3[]): BoxCollider[] {
   const thickness = WALL_THICKNESS
   const roomSize = ROOM_SIZE
-  const radius = 0.3
+  const radius = 0.3 // sdRoundBox의 radius와 동일
+  
+  return [
+    // 바닥 (rounded 값 포함한 실제 크기)
+    {
+      position: wallPositions[0],
+      size: new THREE.Vector3(
+        (roomSize + radius) * 2,
+        (thickness + radius) * 2,
+        (roomSize + radius) * 2
+      )
+    },
+    // 앞 벽
+    {
+      position: wallPositions[1],
+      size: new THREE.Vector3(
+        (roomSize + radius) * 2,
+        (roomSize + radius) * 2,
+        (thickness + radius) * 2
+      )
+    },
+    // 뒤 벽
+    {
+      position: wallPositions[2],
+      size: new THREE.Vector3(
+        (roomSize + radius) * 2,
+        (roomSize + radius) * 2,
+        (thickness + radius) * 2
+      )
+    },
+    // 왼쪽 벽
+    {
+      position: wallPositions[3],
+      size: new THREE.Vector3(
+        (thickness + radius) * 2,
+        (roomSize + radius) * 2,
+        (roomSize + radius) * 2
+      )
+    },
+    // 오른쪽 벽
+    {
+      position: wallPositions[4],
+      size: new THREE.Vector3(
+        (thickness + radius) * 2,
+        (roomSize + radius) * 2,
+        (roomSize + radius) * 2
+      )
+    }
+  ]
+}
 
-  // 바닥
-  let floorP = pos.clone().sub(wallPositions[0])
-  let floor = sdRoundBox(floorP, new THREE.Vector3(roomSize, thickness, roomSize), radius)
+// Voxel 기반 collider 생성 (Shape 전용, 동적 voxelSize)
+export function generateVoxelColliders(
+  wallPositions: THREE.Vector3[],
+  shapes: Shape[]
+): BoxCollider[] {
+  // Wall collider 5개 생성 (즉시 반환용)
+  const wallColliders = createWallColliders(wallPositions)
+  
+  // Shape가 없으면 wall만 반환
+  if (shapes.length === 0) {
+    console.log('Generated 5 wall box colliders (no shapes)')
+    return wallColliders
+  }
+  
+  const shapeColliders: BoxCollider[] = []
+  
+  // 모든 shape의 bounding box를 미리 계산
+  const shapeBounds = shapes.map(shape => getShapeBounds(shape))
 
-  // 앞 벽
-  let frontP = pos.clone().sub(wallPositions[1])
-  let frontWall = sdRoundBox(frontP, new THREE.Vector3(roomSize, roomSize, thickness), radius)
+  // 샘플링 영역: 모든 shape bounds의 union
+  let minBound = shapeBounds[0].min.clone()
+  let maxBound = shapeBounds[0].max.clone()
+  for (const bounds of shapeBounds) {
+    minBound.min(bounds.min)
+    maxBound.max(bounds.max)
+  }
+  
+  const bounds = {
+    min: minBound,
+    max: maxBound
+  }
 
-  // 뒤 벽
-  let backP = pos.clone().sub(wallPositions[2])
-  let backWall = sdRoundBox(backP, new THREE.Vector3(roomSize, roomSize, thickness), radius)
+  // Shape 영역의 크기 계산
+  const boundsSize = new THREE.Vector3(
+    bounds.max.x - bounds.min.x,
+    bounds.max.y - bounds.min.y,
+    bounds.max.z - bounds.min.z
+  )
+  const averageSize = (boundsSize.x + boundsSize.y + boundsSize.z) / 3
 
-  // 왼쪽 벽
-  let leftP = pos.clone().sub(wallPositions[3])
-  let leftWall = sdRoundBox(leftP, new THREE.Vector3(thickness, roomSize, roomSize), radius)
+  // 크기에 비례한 동적 voxelSize (작은 shape는 정밀하게, 큰 shape는 크게)
+  const dynamicVoxelSize = Math.max(0.15, Math.min(0.2, averageSize / 12))
+  
+  console.log(`Shape bounds size: ${averageSize.toFixed(2)}, using voxelSize: ${dynamicVoxelSize.toFixed(3)}`)
 
-  // 오른쪽 벽
-  let rightP = pos.clone().sub(wallPositions[4])
-  let rightWall = sdRoundBox(rightP, new THREE.Vector3(thickness, roomSize, roomSize), radius)
+  // Voxel grid 생성
+  const voxels: boolean[][][] = []
+  const gridSize = {
+    x: Math.ceil(boundsSize.x / dynamicVoxelSize),
+    y: Math.ceil(boundsSize.y / dynamicVoxelSize),
+    z: Math.ceil(boundsSize.z / dynamicVoxelSize)
+  }
 
-  // 모든 벽 합치기
-  let d = floor
-  d = opSmoothUnion(d, frontWall, k)
-  d = opSmoothUnion(d, backWall, k)
-  d = opSmoothUnion(d, leftWall, k)
-  d = opSmoothUnion(d, rightWall, k)
+  // Shape만 SDF 계산 (wall 제외)
+  const sdfThreshold = -dynamicVoxelSize * 0.05
+  
+  for (let x = 0; x < gridSize.x; x++) {
+    voxels[x] = []
+    for (let y = 0; y < gridSize.y; y++) {
+      voxels[x][y] = []
+      for (let z = 0; z < gridSize.z; z++) {
+        const worldPos = new THREE.Vector3(
+          bounds.min.x + x * dynamicVoxelSize + dynamicVoxelSize * 0.5,
+          bounds.min.y + y * dynamicVoxelSize + dynamicVoxelSize * 0.5,
+          bounds.min.z + z * dynamicVoxelSize + dynamicVoxelSize * 0.5
+        )
 
-  // Shape 추가 (scale, rotation 적용)
-  for (const shape of shapes) {
-    const shapeP = pos.clone().sub(shape.position)
-    
-    // Apply rotation (transpose for inverse transform)
+        // Shape만 계산 (첫 shape로 초기화)
+        let d = Infinity
+        for (let i = 0; i < shapes.length; i++) {
+          const shape = shapes[i]
+          
+          // Bounding box 체크로 스킵
+          if (!isPointInBounds(worldPos, shapeBounds[i])) {
+            continue
+          }
+          
+          const shapeP = worldPos.clone().sub(shape.position)
     const rotMatrix = createRotationMatrix(shape.rotation)
-    rotMatrix.transpose() // Inverse rotation for coordinate transformation
+          rotMatrix.transpose()
     shapeP.applyMatrix3(rotMatrix)
     
     let shapeDist: number
     
-    // Select SDF based on shape type
     switch (shape.shapeType) {
       case 'sphere':
         shapeDist = sdSphere(shapeP, shape.radius, shape.scale)
@@ -235,60 +339,25 @@ export function calculateSceneSDF(
         shapeDist = sdSphere(shapeP, shape.radius, shape.scale)
     }
 
-    if (shape.operation === 'union') {
-      d = opSmoothUnion(d, shapeDist, k)
-    } else {
-      d = opSmoothSubtraction(shapeDist, d, k)
-    }
-  }
-
-  return d
-}
-
-interface BoxCollider {
-  position: THREE.Vector3
-  size: THREE.Vector3
-}
-
-// Voxel 기반 collider 생성
-export function generateVoxelColliders(
-  wallPositions: THREE.Vector3[],
-  shapes: Shape[],
-  voxelSize: number = 0.2
-): BoxCollider[] {
-  const colliders: BoxCollider[] = []
-  
-  // 샘플링 영역 정의 (방 주변)
-  const bounds = {
-    min: new THREE.Vector3(-3, -3, -3),
-    max: new THREE.Vector3(3, 3, 3)
-  }
-
-  // Voxel grid 생성
-  const voxels: boolean[][][] = []
-  const gridSize = {
-    x: Math.ceil((bounds.max.x - bounds.min.x) / voxelSize),
-    y: Math.ceil((bounds.max.y - bounds.min.y) / voxelSize),
-    z: Math.ceil((bounds.max.z - bounds.min.z) / voxelSize)
-  }
-
-  // SDF 샘플링하여 내부 voxel 찾기
-  // 표면을 더 정확하게 캡처하기 위해 약간의 오프셋 적용
-  const sdfThreshold = -voxelSize * 0.05 // 표면에 더 가까운 voxel만 포함
-  
-  for (let x = 0; x < gridSize.x; x++) {
-    voxels[x] = []
-    for (let y = 0; y < gridSize.y; y++) {
-      voxels[x][y] = []
-      for (let z = 0; z < gridSize.z; z++) {
-        const worldPos = new THREE.Vector3(
-          bounds.min.x + x * voxelSize + voxelSize * 0.5,
-          bounds.min.y + y * voxelSize + voxelSize * 0.5,
-          bounds.min.z + z * voxelSize + voxelSize * 0.5
-        )
+          // operation에 따라 처리
+          const k = BLEND_STRENGTH
+          if (shape.operation === 'union') {
+            // union: 첫 번째 또는 기존과 합치기
+            if (d === Infinity) {
+              d = shapeDist
+            } else {
+              d = opSmoothUnion(d, shapeDist, k)
+            }
+          } else {
+            // subtract: 기존 geometry가 있을 때만 빼기
+            if (d !== Infinity) {
+              d = opSmoothSubtraction(shapeDist, d, k)
+            }
+            // subtract인데 d가 Infinity면 빼는 대상이 없으므로 skip
+          }
+        }
         
-        const sdf = calculateSceneSDF(worldPos, wallPositions, shapes)
-        voxels[x][y][z] = sdf < sdfThreshold // 표면 근처의 내부만 true
+        voxels[x][y][z] = d < sdfThreshold
       }
     }
   }
@@ -358,22 +427,24 @@ export function generateVoxelColliders(
 
         // Box collider 생성
         const position = new THREE.Vector3(
-          bounds.min.x + (x + xSize * 0.5) * voxelSize,
-          bounds.min.y + (y + ySize * 0.5) * voxelSize,
-          bounds.min.z + (z + zSize * 0.5) * voxelSize
+          bounds.min.x + (x + xSize * 0.5) * dynamicVoxelSize,
+          bounds.min.y + (y + ySize * 0.5) * dynamicVoxelSize,
+          bounds.min.z + (z + zSize * 0.5) * dynamicVoxelSize
         )
         const size = new THREE.Vector3(
-          xSize * voxelSize,
-          ySize * voxelSize,
-          zSize * voxelSize
+          xSize * dynamicVoxelSize,
+          ySize * dynamicVoxelSize,
+          zSize * dynamicVoxelSize
         )
 
-        colliders.push({ position, size })
+        shapeColliders.push({ position, size })
       }
     }
   }
 
-  console.log(`Generated ${colliders.length} box colliders from voxelization`)
-  return colliders
+  // Wall과 Shape collider 합치기
+  const allColliders = [...wallColliders, ...shapeColliders]
+  console.log(`Generated ${wallColliders.length} wall + ${shapeColliders.length} shape = ${allColliders.length} total box colliders`)
+  return allColliders
 }
 

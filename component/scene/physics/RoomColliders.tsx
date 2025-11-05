@@ -10,14 +10,19 @@ interface RoomCollidersProps {
 }
 
 export function RoomColliders({ shapes }: RoomCollidersProps) {
-  // 마운트 시점의 shapes를 ref에 저장
-  const initialShapesRef = useRef(shapes)
+  // shapes의 모든 속성(position, rotation, scale, operation 등)을 직렬화하여 변경 감지
+  const shapesKey = useMemo(() => {
+    return shapes.map(s => 
+      `${s.id}_${s.operation}_${s.position.toArray()}_${s.rotation.toArray()}_${s.scale.toArray()}`
+    ).join('|')
+  }, [shapes])
   
-  // 컴포넌트가 마운트될 때 한 번만 계산 (key 변경으로 재마운트됨)
+  // shapesKey가 변경될 때마다 collider 재계산
   const boxColliders = useMemo(() => {
-    console.log('Voxelizing scene for colliders...')
-    return generateVoxelColliders(initialPlanePositions, initialShapesRef.current, 0.12)
-  }, []) // 빈 dependency - 마운트 시에만 실행
+    console.log('Generating colliders: walls (simple boxes) + shapes (dynamic voxel size)...')
+    console.log(`Shapes key: ${shapesKey}`)
+    return generateVoxelColliders(initialPlanePositions, shapes)
+  }, [shapesKey, shapes]) // shapesKey로 operation 변경 감지
 
   return (
     <>
