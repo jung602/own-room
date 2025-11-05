@@ -13,7 +13,8 @@ interface SDFRoomTestProps {
   onShapeScaleChange: (id: string, scale: THREE.Vector3) => void
   onShapeRotationChange: (id: string, rotation: THREE.Euler) => void
   onShapeSelect: (id: string | null) => void
-  collidersConfirmed?: boolean
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }
 
 interface ShapeVisualizationProps {
@@ -23,10 +24,11 @@ interface ShapeVisualizationProps {
   onPositionChange: (position: THREE.Vector3) => void
   onScaleChange: (scale: THREE.Vector3) => void
   onRotationChange: (rotation: THREE.Euler) => void
-  collidersConfirmed: boolean
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }
 
-function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onScaleChange, onRotationChange, collidersConfirmed }: ShapeVisualizationProps) {
+function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onScaleChange, onRotationChange, onDragStart, onDragEnd }: ShapeVisualizationProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   
   // Get geometry based on shape type
@@ -51,7 +53,7 @@ function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onS
   
   return (
     <>
-      {isSelected && !collidersConfirmed ? (
+      {isSelected ? (
         <group position={shape.position}>
         <PivotControls
           anchor={[0, 0, 0]}
@@ -59,6 +61,9 @@ function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onS
           scale={1}
           activeAxes={[true, true, true]}
           disableRotations={false}
+          onDragStart={() => {
+            if (onDragStart) onDragStart()
+          }}
           onDrag={(l, deltaL, w, deltaW) => {
             const newPos = new THREE.Vector3().setFromMatrixPosition(w)
             const newScale = new THREE.Vector3().setFromMatrixScale(w)
@@ -66,6 +71,9 @@ function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onS
             onPositionChange(newPos)
             onScaleChange(newScale)
               onRotationChange(newRot)
+          }}
+          onDragEnd={() => {
+            if (onDragEnd) onDragEnd()
           }}
         >
           <mesh 
@@ -85,10 +93,8 @@ function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onS
         <mesh 
           ref={meshRef}
           onClick={(e) => {
-            if (!collidersConfirmed) {
-              e.stopPropagation()
-              onSelect()
-            }
+            e.stopPropagation()
+            onSelect()
           }}
           visible={false}
         >
@@ -107,7 +113,8 @@ export function SDFRoomTest({
   onShapeScaleChange,
   onShapeRotationChange,
   onShapeSelect,
-  collidersConfirmed = false
+  onDragStart,
+  onDragEnd
 }: SDFRoomTestProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   
@@ -230,7 +237,8 @@ export function SDFRoomTest({
           onPositionChange={(pos) => onShapePositionChange(shape.id, pos)}
           onScaleChange={(scale) => onShapeScaleChange(shape.id, scale)}
           onRotationChange={(rot) => onShapeRotationChange(shape.id, rot)}
-          collidersConfirmed={collidersConfirmed}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
         />
       ))}
     </>

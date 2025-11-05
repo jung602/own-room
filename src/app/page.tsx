@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { EffectComposer, N8AO, BrightnessContrast, ToneMapping, DotScreen, Noise } from '@react-three/postprocessing'
@@ -12,9 +12,6 @@ import { PhysicsScene } from '../../component/scene/physics/PhysicsScene'
 import { RoomColliders } from '../../component/scene/physics/RoomColliders'
 import { DynamicBox } from '../../component/scene/objects/DynamicBox'
 import { useDragDrop } from '../../component/scene/utils/useDragDrop'
-import { initialPlanePositions } from '../../component/scene/assets/walls'
-import { generateVoxelColliders } from '../../component/scene/physics/voxelizeColliders'
-
 
 interface Box {
   id: string
@@ -28,29 +25,10 @@ interface SceneContentProps {
   onShapeScaleChange: (id: string, scale: THREE.Vector3) => void
   onShapeRotationChange: (id: string, rotation: THREE.Euler) => void
   onShapeSelect: (id: string | null) => void
-  collidersConfirmed: boolean
   boxes: Box[]
-  showColliderWireframe: boolean
 }
 
 
-
-function ColliderWireframes({ shapes }: { shapes: Shape[] }) {
-  const colliders = useMemo(() => {
-    return generateVoxelColliders(initialPlanePositions, shapes, 0.2)
-  }, [shapes])
-
-  return (
-    <>
-      {colliders.map((collider, index) => (
-        <mesh key={index} position={collider.position}>
-          <boxGeometry args={[collider.size.x, collider.size.y, collider.size.z]} />
-          <meshBasicMaterial color="#00ff00" wireframe transparent opacity={0.3} />
-        </mesh>
-      ))}
-    </>
-  )
-}
 
 function SceneContent({
   shapes,
@@ -59,9 +37,7 @@ function SceneContent({
   onShapeScaleChange,
   onShapeRotationChange,
   onShapeSelect,
-  collidersConfirmed,
   boxes,
-  showColliderWireframe,
 }: SceneContentProps) {
   const {
     draggedObjectId,
@@ -71,6 +47,39 @@ function SceneContent({
     handlePointerMove,
     handlePointerUp,
   } = useDragDrop()
+  
+  // 기즈모 드래그 상태 추적
+  const [isGizmoDragging, setIsGizmoDragging] = useState(false)
+  const [shapesKey, setShapesKey] = useState(() => {
+    // 초기 key 생성
+    return shapes.map(s => 
+      `${s.id}-${s.position.toArray().join(',')}-${s.scale.toArray().join(',')}-${s.rotation.toArray().join(',')}-${s.operation}`
+    ).join('|')
+  })
+  
+  // shapes가 변경되면 key 업데이트 (단, 드래그 중이 아닐 때만)
+  useEffect(() => {
+    if (!isGizmoDragging) {
+      const newKey = shapes.map(s => 
+        `${s.id}-${s.position.toArray().join(',')}-${s.scale.toArray().join(',')}-${s.rotation.toArray().join(',')}-${s.operation}`
+      ).join('|')
+      setShapesKey(newKey)
+    }
+  }, [shapes, isGizmoDragging])
+  
+  // 드래그 핸들러
+  const handleGizmoDragStart = () => {
+    setIsGizmoDragging(true)
+  }
+  
+  const handleGizmoDragEnd = () => {
+    setIsGizmoDragging(false)
+    // 드래그 종료 시 즉시 collider 업데이트
+    const newKey = shapes.map(s => 
+      `${s.id}-${s.position.toArray().join(',')}-${s.scale.toArray().join(',')}-${s.rotation.toArray().join(',')}-${s.operation}`
+    ).join('|')
+    setShapesKey(newKey)
+  }
   
   // Add event listeners for drag
   useEffect(() => {
@@ -104,9 +113,6 @@ function SceneContent({
         shadow-camera-bottom={-10}
       />
       
-      {/* Collider wireframes (Physics 밖에서 렌더링) */}
-      {collidersConfirmed && showColliderWireframe && <ColliderWireframes shapes={shapes} />}
-      
       <PhysicsScene>
         <SDFRoomTest 
           shapes={shapes}
@@ -115,10 +121,11 @@ function SceneContent({
           onShapeScaleChange={onShapeScaleChange}
           onShapeRotationChange={onShapeRotationChange}
           onShapeSelect={onShapeSelect}
-          collidersConfirmed={collidersConfirmed}
+          onDragStart={handleGizmoDragStart}
+          onDragEnd={handleGizmoDragEnd}
         />
         
-        {collidersConfirmed && <RoomColliders spheres={shapes} />}
+        <RoomColliders key={shapesKey} shapes={shapes} />
         
         {boxes.map((box) => (
           <DynamicBox
@@ -158,9 +165,7 @@ function SceneContent({
 export default function App() {
   const [shapes, setShapes] = useState<Shape[]>([])
   const [selectedShape, setSelectedShape] = useState<string | null>(null)
-  const [collidersConfirmed, setCollidersConfirmed] = useState(false)
   const [boxes, setBoxes] = useState<Box[]>([])
-  const [showColliderWireframe, setShowColliderWireframe] = useState(true)
   
   const handleAddShape = (shapeType: ShapeType) => {
     if (shapes.length >= MAX_SHAPES) return
@@ -208,21 +213,12 @@ export default function App() {
     ))
   }
   
-  const handleConfirmColliders = () => {
-    setCollidersConfirmed(true)
-  }
-  
   const handleAddBox = () => {
-    if (!collidersConfirmed) return
     const newBox: Box = {
       id: `box-${boxes.length + 1}`,
       initialPosition: [0, 3, 0],
     }
     setBoxes([...boxes, newBox])
-  }
-  
-  const handleToggleColliderWireframe = () => {
-    setShowColliderWireframe(!showColliderWireframe)
   }
   
   return (
@@ -235,9 +231,7 @@ export default function App() {
           onShapeScaleChange={handleShapeScaleChange}
           onShapeRotationChange={handleShapeRotationChange}
           onShapeSelect={setSelectedShape}
-          collidersConfirmed={collidersConfirmed}
           boxes={boxes}
-          showColliderWireframe={showColliderWireframe}
         />
       </Canvas>
       
@@ -247,11 +241,7 @@ export default function App() {
         onAddShape={handleAddShape}
         onDeleteShape={handleDeleteShape}
         onToggleOperation={handleToggleOperation}
-        onConfirmColliders={handleConfirmColliders}
         onAddBox={handleAddBox}
-        collidersConfirmed={collidersConfirmed}
-        showColliderWireframe={showColliderWireframe}
-        onToggleColliderWireframe={handleToggleColliderWireframe}
       />
     </div>
   )

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useBox } from '@react-three/cannon'
 import * as THREE from 'three'
 import { Shape } from '../assets/shapes'
@@ -6,16 +6,18 @@ import { initialPlanePositions } from '../assets/walls'
 import { generateVoxelColliders } from './voxelizeColliders'
 
 interface RoomCollidersProps {
-  spheres: Shape[]
+  shapes: Shape[]
 }
 
-export function RoomColliders({ spheres }: RoomCollidersProps) {
-  // Confirm 시점의 씬을 voxelize하여 box collider들 생성
-  // 더 작은 voxel 크기로 디테일 증가
+export function RoomColliders({ shapes }: RoomCollidersProps) {
+  // 마운트 시점의 shapes를 ref에 저장
+  const initialShapesRef = useRef(shapes)
+  
+  // 컴포넌트가 마운트될 때 한 번만 계산 (key 변경으로 재마운트됨)
   const boxColliders = useMemo(() => {
     console.log('Voxelizing scene for colliders...')
-    return generateVoxelColliders(initialPlanePositions, spheres, 0.12)
-  }, [spheres])
+    return generateVoxelColliders(initialPlanePositions, initialShapesRef.current, 0.12)
+  }, []) // 빈 dependency - 마운트 시에만 실행
 
   return (
     <>
