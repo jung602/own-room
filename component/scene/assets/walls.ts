@@ -60,6 +60,7 @@ export const wallFragmentShader = `
   uniform vec3 uShapePositions[10];
   uniform float uShapeRadii[10];
   uniform vec3 uShapeScales[10];
+  uniform vec3 uShapeRotations[10]; // Euler angles in radians (x, y, z)
   uniform float uShapeOperations[10]; // 0.0 = union, 1.0 = subtract
   uniform float uShapeTypes[10]; // 0=sphere, 1=box, 2=torus, 3=roundCone, 4=capsule, 5=cylinder
   
@@ -89,6 +90,37 @@ export const wallFragmentShader = `
   ${smoothSubtractionCode}
   
   ${allShapeSDFCode}
+  
+  // Rotation matrix from Euler angles (XYZ order)
+  mat3 rotationMatrix(vec3 euler) {
+    float cx = cos(euler.x);
+    float sx = sin(euler.x);
+    float cy = cos(euler.y);
+    float sy = sin(euler.y);
+    float cz = cos(euler.z);
+    float sz = sin(euler.z);
+    
+    // XYZ rotation order
+    mat3 rotX = mat3(
+      1.0, 0.0, 0.0,
+      0.0, cx, -sx,
+      0.0, sx, cx
+    );
+    
+    mat3 rotY = mat3(
+      cy, 0.0, sy,
+      0.0, 1.0, 0.0,
+      -sy, 0.0, cy
+    );
+    
+    mat3 rotZ = mat3(
+      cz, -sz, 0.0,
+      sz, cz, 0.0,
+      0.0, 0.0, 1.0
+    );
+    
+    return rotZ * rotY * rotX;
+  }
   
   // Masking boxes map (바깥쪽 마스킹 박스들만 - 벽/바닥과 분리)
   float mapMaskingBoxes(vec3 pos) {
@@ -180,7 +212,11 @@ export const wallFragmentShader = `
     for(int i = 0; i < 10; i++) {
       if(i >= uShapeCount) break;
       
+      // Apply rotation to the position
       vec3 shapeP = pos - uShapePositions[i];
+      mat3 rot = rotationMatrix(uShapeRotations[i]);
+      shapeP = rot * shapeP;
+      
       float shapeDist;
       
       // Select SDF based on shape type

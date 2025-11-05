@@ -1,6 +1,6 @@
-import { useRef, useMemo, useEffect, useState } from 'react'
+import { useRef, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useTexture, TransformControls } from '@react-three/drei'
+import { useTexture, PivotControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { calculateWallVisibility } from './utils/cameraFacingUtil'
 import { initialPlanePositions, wallVertexShader, wallFragmentShader } from './assets/walls'
@@ -11,8 +11,8 @@ interface SDFRoomTestProps {
   selectedShape: string | null
   onShapePositionChange: (id: string, position: THREE.Vector3) => void
   onShapeScaleChange: (id: string, scale: THREE.Vector3) => void
+  onShapeRotationChange: (id: string, rotation: THREE.Euler) => void
   onShapeSelect: (id: string | null) => void
-  onScaleDragChange: (isDragging: boolean) => void
   collidersConfirmed?: boolean
 }
 
@@ -22,86 +22,12 @@ interface ShapeVisualizationProps {
   onSelect: () => void
   onPositionChange: (position: THREE.Vector3) => void
   onScaleChange: (scale: THREE.Vector3) => void
-  onScaleDragChange: (isDragging: boolean) => void
+  onRotationChange: (rotation: THREE.Euler) => void
   collidersConfirmed: boolean
 }
 
-function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onScaleChange, onScaleDragChange, collidersConfirmed }: ShapeVisualizationProps) {
+function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onScaleChange, onRotationChange, collidersConfirmed }: ShapeVisualizationProps) {
   const meshRef = useRef<THREE.Mesh>(null)
-  const [isDraggingScale, setIsDraggingScale] = useState(false)
-  const dragStartPos = useRef<THREE.Vector3 | null>(null)
-  const dragStartScale = useRef<THREE.Vector3 | null>(null)
-  const dragAxis = useRef<'x' | 'y' | 'uniform' | null>(null)
-  const isTransformDragging = useRef(false)
-  
-  // Position 동기화: TransformControls가 드래그 중이 아닐 때만 업데이트
-  useEffect(() => {
-    if (meshRef.current && !isTransformDragging.current) {
-      meshRef.current.position.copy(shape.position)
-    }
-  }, [shape.position])
-  
-  const handleScaleHandlePointerDown = (e: any, axis: 'x' | 'y' | 'uniform') => {
-    e.stopPropagation()
-    // 즉시 TransformControls 비활성화
-    setIsDraggingScale(true)
-    dragAxis.current = axis
-    dragStartScale.current = shape.scale.clone()
-    onScaleDragChange(true) // OrbitControls 비활성화
-    
-    // 추가 이벤트 전파 차단
-    if (e.nativeEvent) {
-      e.nativeEvent.stopImmediatePropagation()
-    }
-  }
-  
-  const handlePointerMove = (e: PointerEvent) => {
-    if (!isDraggingScale || !dragStartScale.current || !dragAxis.current) return
-    
-    // Calculate drag distance based on mouse movement
-    const deltaX = e.movementX * 0.01
-    const deltaY = -e.movementY * 0.01
-    
-    let newScale = shape.scale.clone()
-    
-    if (dragAxis.current === 'x') {
-      newScale.x = Math.max(0.1, newScale.x + deltaX)
-    } else if (dragAxis.current === 'y') {
-      newScale.y = Math.max(0.1, newScale.y + deltaY)
-    } else if (dragAxis.current === 'uniform') {
-      const delta = (deltaX + deltaY) * 0.5
-      const scaleFactor = 1 + delta
-      newScale.multiplyScalar(Math.max(0.1, scaleFactor))
-    }
-    
-    onScaleChange(newScale)
-  }
-  
-  const handlePointerUp = () => {
-    if (isDraggingScale) {
-      onScaleDragChange(false) // OrbitControls 재활성화
-    }
-    setIsDraggingScale(false)
-    dragStartPos.current = null
-    dragStartScale.current = null
-    dragAxis.current = null
-  }
-  
-  useEffect(() => {
-    if (isSelected && !collidersConfirmed) {
-      window.addEventListener('pointermove', handlePointerMove)
-      window.addEventListener('pointerup', handlePointerUp)
-      return () => {
-        window.removeEventListener('pointermove', handlePointerMove)
-        window.removeEventListener('pointerup', handlePointerUp)
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSelected, collidersConfirmed, shape.scale, isDraggingScale])
-  
-  // Calculate handle positions based on shape radius and scale
-  const handleSize = 0.1
-  const handleDistance = shape.radius * 1.2
   
   // Get geometry based on shape type
   const getGeometry = () => {
@@ -124,90 +50,53 @@ function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onS
   }
   
   return (
-    <group>
-      {/* 항상 보이지 않는 mesh (TransformControls용) */}
-      <mesh 
-        ref={meshRef}
-        onClick={(e) => {
-          if (!collidersConfirmed) {
-            e.stopPropagation()
-            onSelect()
-          }
-        }}
-        visible={false}
-      >
-        {getGeometry()}
-      </mesh>
-      
-      {isSelected && meshRef.current && !collidersConfirmed && (
-        <>
-          <TransformControls
-            object={meshRef.current}
-            mode="translate"
-            enabled={!isDraggingScale}
-            onMouseDown={() => {
-              isTransformDragging.current = true
+    <>
+      {isSelected && !collidersConfirmed ? (
+        <group position={shape.position}>
+          <PivotControls
+            anchor={[0, 0, 0]}
+            depthTest={false}
+            scale={1}
+            activeAxes={[true, true, true]}
+            disableRotations={false}
+            onDrag={(l, deltaL, w, deltaW) => {
+              const newPos = new THREE.Vector3().setFromMatrixPosition(w)
+              const newScale = new THREE.Vector3().setFromMatrixScale(w)
+              const newRot = new THREE.Euler().setFromRotationMatrix(w)
+              onPositionChange(newPos)
+              onScaleChange(newScale)
+              onRotationChange(newRot)
             }}
-            onMouseUp={() => {
-              isTransformDragging.current = false
-            }}
-            onObjectChange={() => {
-              if (meshRef.current && !isDraggingScale) {
-                onPositionChange(meshRef.current.position)
+          >
+            <mesh 
+              ref={meshRef}
+              onClick={(e) => {
+                e.stopPropagation()
+                onSelect()
+              }}
+              visible={false}
+            >
+              {getGeometry()}
+            </mesh>
+          </PivotControls>
+        </group>
+      ) : (
+        <group position={shape.position}>
+          <mesh 
+            ref={meshRef}
+            onClick={(e) => {
+              if (!collidersConfirmed) {
+                e.stopPropagation()
+                onSelect()
               }
             }}
-          />
-          
-          {/* X-axis scale handle (red, right) */}
-          <mesh
-            position={[
-              shape.position.x + handleDistance * shape.scale.x,
-              shape.position.y,
-              shape.position.z
-            ]}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              handleScaleHandlePointerDown(e, 'x')
-            }}
+            visible={false}
           >
-            <sphereGeometry args={[handleSize, 16, 16]} />
-            <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={0.5} />
+            {getGeometry()}
           </mesh>
-          
-          {/* Y-axis scale handle (green, top) */}
-          <mesh
-            position={[
-              shape.position.x,
-              shape.position.y + handleDistance * shape.scale.y,
-              shape.position.z
-            ]}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              handleScaleHandlePointerDown(e, 'y')
-            }}
-          >
-            <sphereGeometry args={[handleSize, 16, 16]} />
-            <meshStandardMaterial color="#00ff00" emissive="#00ff00" emissiveIntensity={0.5} />
-          </mesh>
-          
-          {/* Uniform scale handle (yellow, diagonal) */}
-          <mesh
-            position={[
-              shape.position.x + handleDistance * shape.scale.x * 0.707,
-              shape.position.y + handleDistance * shape.scale.y * 0.707,
-              shape.position.z + handleDistance * shape.scale.z * 0.707
-            ]}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              handleScaleHandlePointerDown(e, 'uniform')
-            }}
-          >
-            <sphereGeometry args={[handleSize, 16, 16]} />
-            <meshStandardMaterial color="#ffff00" emissive="#ffff00" emissiveIntensity={0.5} />
-          </mesh>
-        </>
+        </group>
       )}
-    </group>
+    </>
   )
 }
 
@@ -216,8 +105,8 @@ export function SDFRoomTest({
   selectedShape,
   onShapePositionChange,
   onShapeScaleChange,
+  onShapeRotationChange,
   onShapeSelect,
-  onScaleDragChange,
   collidersConfirmed = false
 }: SDFRoomTestProps) {
   const meshRef = useRef<THREE.Mesh>(null)
@@ -237,6 +126,7 @@ export function SDFRoomTest({
     const shapePositions = Array(MAX_SHAPES).fill(null).map(() => new THREE.Vector3(0, 0, 0))
     const shapeRadii = Array(MAX_SHAPES).fill(DEFAULT_SHAPE_RADIUS)
     const shapeScales = Array(MAX_SHAPES).fill(null).map(() => new THREE.Vector3(1, 1, 1))
+    const shapeRotations = Array(MAX_SHAPES).fill(null).map(() => new THREE.Vector3(0, 0, 0))
     const shapeOperations = Array(MAX_SHAPES).fill(0.0) // 0.0 = union
     const shapeTypes = Array(MAX_SHAPES).fill(0.0) // 0.0 = sphere
     
@@ -269,6 +159,7 @@ export function SDFRoomTest({
         uShapePositions: { value: shapePositions },
         uShapeRadii: { value: shapeRadii },
         uShapeScales: { value: shapeScales },
+        uShapeRotations: { value: shapeRotations },
         uShapeOperations: { value: shapeOperations },
         uShapeTypes: { value: shapeTypes },
       },
@@ -315,6 +206,7 @@ export function SDFRoomTest({
           material.uniforms.uShapePositions.value[index].copy(shape.position)
           material.uniforms.uShapeRadii.value[index] = shape.radius
           material.uniforms.uShapeScales.value[index].copy(shape.scale)
+          material.uniforms.uShapeRotations.value[index].set(shape.rotation.x, shape.rotation.y, shape.rotation.z)
           material.uniforms.uShapeOperations.value[index] = shape.operation === 'union' ? 0.0 : 1.0
           material.uniforms.uShapeTypes.value[index] = shapeTypeToNumber(shape.shapeType)
         }
@@ -328,7 +220,7 @@ export function SDFRoomTest({
         <boxGeometry args={[100, 100, 100]} />
       </mesh>
       
-      {/* Render visible shapes with TransformControls */}
+      {/* Render visible shapes with PivotControls */}
       {shapes.map((shape) => (
         <ShapeVisualization
           key={shape.id}
@@ -337,7 +229,7 @@ export function SDFRoomTest({
           onSelect={() => onShapeSelect(shape.id)}
           onPositionChange={(pos) => onShapePositionChange(shape.id, pos)}
           onScaleChange={(scale) => onShapeScaleChange(shape.id, scale)}
-          onScaleDragChange={onScaleDragChange}
+          onRotationChange={(rot) => onShapeRotationChange(shape.id, rot)}
           collidersConfirmed={collidersConfirmed}
         />
       ))}

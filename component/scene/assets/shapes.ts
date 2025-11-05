@@ -10,6 +10,7 @@ export interface Shape {
   position: THREE.Vector3
   radius: number
   scale: THREE.Vector3
+  rotation: THREE.Euler
   operation: 'union' | 'subtract'
   shapeType: ShapeType
 }
@@ -107,6 +108,7 @@ export function createShape(id: string, shapeType: ShapeType = 'sphere'): Shape 
     position: new THREE.Vector3(0, 0, 0),
     radius: DEFAULT_SHAPE_RADIUS,
     scale: new THREE.Vector3(1, 1, 1),
+    rotation: new THREE.Euler(0, 0, 0),
     operation: 'union',
     shapeType
   }

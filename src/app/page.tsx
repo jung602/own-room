@@ -26,12 +26,11 @@ interface SceneContentProps {
   selectedShape: string | null
   onShapePositionChange: (id: string, position: THREE.Vector3) => void
   onShapeScaleChange: (id: string, scale: THREE.Vector3) => void
+  onShapeRotationChange: (id: string, rotation: THREE.Euler) => void
   onShapeSelect: (id: string | null) => void
-  onScaleDragChange: (isDragging: boolean) => void
   collidersConfirmed: boolean
   boxes: Box[]
   showColliderWireframe: boolean
-  isScaleDragging: boolean
 }
 
 
@@ -41,12 +40,11 @@ function SceneContent({
   selectedShape,
   onShapePositionChange,
   onShapeScaleChange,
+  onShapeRotationChange,
   onShapeSelect,
-  onScaleDragChange,
   collidersConfirmed,
   boxes,
   showColliderWireframe,
-  isScaleDragging,
 }: SceneContentProps) {
   const {
     draggedObjectId,
@@ -98,8 +96,8 @@ function SceneContent({
           selectedShape={selectedShape}
           onShapePositionChange={onShapePositionChange}
           onShapeScaleChange={onShapeScaleChange}
+          onShapeRotationChange={onShapeRotationChange}
           onShapeSelect={onShapeSelect}
-          onScaleDragChange={onScaleDragChange}
           collidersConfirmed={collidersConfirmed}
         />
         
@@ -118,7 +116,7 @@ function SceneContent({
         ))}
       </PhysicsScene>
       
-      <OrbitControls makeDefault enabled={!draggedObjectId && !isScaleDragging} />
+      <OrbitControls makeDefault enabled={!draggedObjectId} />
       
       {/* 스크린프린트 스타일 포스트프로세싱 효과 
       <EffectComposer>
@@ -146,7 +144,6 @@ export default function App() {
   const [collidersConfirmed, setCollidersConfirmed] = useState(false)
   const [boxes, setBoxes] = useState<Box[]>([])
   const [showColliderWireframe, setShowColliderWireframe] = useState(true)
-  const [isScaleDragging, setIsScaleDragging] = useState(false)
   
   const handleAddShape = (shapeType: ShapeType) => {
     if (shapes.length >= MAX_SHAPES) return
@@ -171,7 +168,7 @@ export default function App() {
   }
   
   const handleShapePositionChange = (id: string, newPosition: THREE.Vector3) => {
-    setShapes(shapes.map(shape => 
+    setShapes(prevShapes => prevShapes.map(shape => 
       shape.id === id 
         ? { ...shape, position: newPosition.clone() }
         : shape
@@ -179,9 +176,17 @@ export default function App() {
   }
   
   const handleShapeScaleChange = (id: string, newScale: THREE.Vector3) => {
-    setShapes(shapes.map(shape => 
+    setShapes(prevShapes => prevShapes.map(shape => 
       shape.id === id 
         ? { ...shape, scale: newScale.clone() }
+        : shape
+    ))
+  }
+  
+  const handleShapeRotationChange = (id: string, newRotation: THREE.Euler) => {
+    setShapes(prevShapes => prevShapes.map(shape => 
+      shape.id === id 
+        ? { ...shape, rotation: newRotation.clone() }
         : shape
     ))
   }
@@ -211,12 +216,11 @@ export default function App() {
           selectedShape={selectedShape}
           onShapePositionChange={handleShapePositionChange}
           onShapeScaleChange={handleShapeScaleChange}
+          onShapeRotationChange={handleShapeRotationChange}
           onShapeSelect={setSelectedShape}
-          onScaleDragChange={setIsScaleDragging}
           collidersConfirmed={collidersConfirmed}
           boxes={boxes}
           showColliderWireframe={showColliderWireframe}
-          isScaleDragging={isScaleDragging}
         />
       </Canvas>
       
