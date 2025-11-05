@@ -53,47 +53,47 @@ function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onS
     <>
       {isSelected && !collidersConfirmed ? (
         <group position={shape.position}>
-          <PivotControls
-            anchor={[0, 0, 0]}
-            depthTest={false}
-            scale={1}
-            activeAxes={[true, true, true]}
-            disableRotations={false}
-            onDrag={(l, deltaL, w, deltaW) => {
-              const newPos = new THREE.Vector3().setFromMatrixPosition(w)
-              const newScale = new THREE.Vector3().setFromMatrixScale(w)
+        <PivotControls
+          anchor={[0, 0, 0]}
+          depthTest={false}
+          scale={1}
+          activeAxes={[true, true, true]}
+          disableRotations={false}
+          onDrag={(l, deltaL, w, deltaW) => {
+            const newPos = new THREE.Vector3().setFromMatrixPosition(w)
+            const newScale = new THREE.Vector3().setFromMatrixScale(w)
               const newRot = new THREE.Euler().setFromRotationMatrix(w)
-              onPositionChange(newPos)
-              onScaleChange(newScale)
+            onPositionChange(newPos)
+            onScaleChange(newScale)
               onRotationChange(newRot)
-            }}
-          >
-            <mesh 
-              ref={meshRef}
-              onClick={(e) => {
-                e.stopPropagation()
-                onSelect()
-              }}
-              visible={false}
-            >
-              {getGeometry()}
-            </mesh>
-          </PivotControls>
-        </group>
-      ) : (
-        <group position={shape.position}>
+          }}
+        >
           <mesh 
             ref={meshRef}
             onClick={(e) => {
-              if (!collidersConfirmed) {
-                e.stopPropagation()
-                onSelect()
-              }
+              e.stopPropagation()
+              onSelect()
             }}
             visible={false}
           >
             {getGeometry()}
           </mesh>
+        </PivotControls>
+        </group>
+      ) : (
+        <group position={shape.position}>
+        <mesh 
+          ref={meshRef}
+          onClick={(e) => {
+            if (!collidersConfirmed) {
+              e.stopPropagation()
+              onSelect()
+            }
+          }}
+          visible={false}
+        >
+          {getGeometry()}
+        </mesh>
         </group>
       )}
     </>

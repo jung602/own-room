@@ -35,6 +35,23 @@ interface SceneContentProps {
 
 
 
+function ColliderWireframes({ shapes }: { shapes: Shape[] }) {
+  const colliders = useMemo(() => {
+    return generateVoxelColliders(initialPlanePositions, shapes, 0.2)
+  }, [shapes])
+
+  return (
+    <>
+      {colliders.map((collider, index) => (
+        <mesh key={index} position={collider.position}>
+          <boxGeometry args={[collider.size.x, collider.size.y, collider.size.z]} />
+          <meshBasicMaterial color="#00ff00" wireframe transparent opacity={0.3} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
 function SceneContent({
   shapes,
   selectedShape,
@@ -88,7 +105,7 @@ function SceneContent({
       />
       
       {/* Collider wireframes (Physics 밖에서 렌더링) */}
-      {collidersConfirmed && showColliderWireframe }
+      {collidersConfirmed && showColliderWireframe && <ColliderWireframes shapes={shapes} />}
       
       <PhysicsScene>
         <SDFRoomTest 

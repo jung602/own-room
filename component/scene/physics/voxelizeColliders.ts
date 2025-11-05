@@ -2,6 +2,42 @@ import * as THREE from 'three'
 import { Shape } from '../assets/shapes'
 import { ROOM_SIZE, WALL_THICKNESS, BLEND_STRENGTH } from '../assets/walls'
 
+// Rotation matrix from Euler angles (XYZ order)
+// Shader의 rotationMatrix()와 동일한 로직
+function createRotationMatrix(euler: THREE.Euler): THREE.Matrix3 {
+  const cx = Math.cos(euler.x)
+  const sx = Math.sin(euler.x)
+  const cy = Math.cos(euler.y)
+  const sy = Math.sin(euler.y)
+  const cz = Math.cos(euler.z)
+  const sz = Math.sin(euler.z)
+  
+  // XYZ rotation order
+  const rotX = new THREE.Matrix3()
+  rotX.set(
+    1, 0, 0,
+    0, cx, -sx,
+    0, sx, cx
+  )
+  
+  const rotY = new THREE.Matrix3()
+  rotY.set(
+    cy, 0, sy,
+    0, 1, 0,
+    -sy, 0, cy
+  )
+  
+  const rotZ = new THREE.Matrix3()
+  rotZ.set(
+    cz, -sz, 0,
+    sz, cz, 0,
+    0, 0, 1
+  )
+  
+  // Return rotZ * rotY * rotX
+  return rotZ.multiply(rotY).multiply(rotX)
+}
+
 // SDF 함수들 (셰이더와 동일)
 function sdRoundBox(p: THREE.Vector3, b: THREE.Vector3, r: number): number {
   const d = new THREE.Vector3(
@@ -164,9 +200,15 @@ export function calculateSceneSDF(
   d = opSmoothUnion(d, leftWall, k)
   d = opSmoothUnion(d, rightWall, k)
 
-  // Shape 추가 (scale 적용)
+  // Shape 추가 (scale, rotation 적용)
   for (const shape of shapes) {
     const shapeP = pos.clone().sub(shape.position)
+    
+    // Apply rotation (transpose for inverse transform)
+    const rotMatrix = createRotationMatrix(shape.rotation)
+    rotMatrix.transpose() // Inverse rotation for coordinate transformation
+    shapeP.applyMatrix3(rotMatrix)
+    
     let shapeDist: number
     
     // Select SDF based on shape type
