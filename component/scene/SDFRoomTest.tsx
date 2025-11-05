@@ -115,7 +115,9 @@ export function SDFRoomTest({
   const planePositions = initialPlanePositions
   
   // 텍스쳐 로드 (public/texture/Cement_BaseColor.jpg)
-  const cementTexture = useTexture('/texture/Cement_BaseColor.jpg') as THREE.Texture
+  // GitHub Pages 배포 시 basePath 적용
+  const basePath = process.env.NODE_ENV === 'production' ? '/own-room' : ''
+  const cementTexture = useTexture(`${basePath}/texture/Cement_BaseColor.jpg`) as THREE.Texture
   cementTexture.wrapS = THREE.RepeatWrapping
   cementTexture.wrapT = THREE.RepeatWrapping
   cementTexture.anisotropy = 16
