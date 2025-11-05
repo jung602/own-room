@@ -5,16 +5,16 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { EffectComposer, N8AO, BrightnessContrast, ToneMapping, DotScreen, Noise } from '@react-three/postprocessing'
 import * as THREE from 'three'
-import { SDFRoomTest } from '../../component/SDFRoomTest'
-import { UIControls } from '../../component/utils/UIControls'
-import { Sphere, createSphere, MAX_SPHERES } from '../../component/assets/spheres'
-import { PhysicsScene } from '../../component/physics/PhysicsScene' 
-import { RoomColliders } from '../../component/physics/RoomColliders'
-import { DynamicBox } from '../../component/objects/DynamicBox'
-import { useDragDrop } from '../../component/utils/useDragDrop'
-import { initialPlanePositions } from '../../component/assets/walls'
-import { generateVoxelColliders } from '../../component/physics/voxelizeColliders'
-import { BlendFunction } from 'postprocessing'
+import { SDFRoomTest } from '../../component/scene/SDFRoomTest'
+import { UIControls } from '../../component/ui/UIControls'
+import { Shape, createShape, MAX_SHAPES, ShapeType } from '../../component/scene/assets/shapes'
+import { PhysicsScene } from '../../component/scene/physics/PhysicsScene' 
+import { RoomColliders } from '../../component/scene/physics/RoomColliders'
+import { DynamicBox } from '../../component/scene/objects/DynamicBox'
+import { useDragDrop } from '../../component/scene/utils/useDragDrop'
+import { initialPlanePositions } from '../../component/scene/assets/walls'
+import { generateVoxelColliders } from '../../component/scene/physics/voxelizeColliders'
+
 
 interface Box {
   id: string
@@ -22,11 +22,11 @@ interface Box {
 }
 
 interface SceneContentProps {
-  spheres: Sphere[]
-  selectedSphere: string | null
-  onSpherePositionChange: (id: string, position: THREE.Vector3) => void
-  onSphereScaleChange: (id: string, scale: THREE.Vector3) => void
-  onSphereSelect: (id: string | null) => void
+  shapes: Shape[]
+  selectedShape: string | null
+  onShapePositionChange: (id: string, position: THREE.Vector3) => void
+  onShapeScaleChange: (id: string, scale: THREE.Vector3) => void
+  onShapeSelect: (id: string | null) => void
   onScaleDragChange: (isDragging: boolean) => void
   collidersConfirmed: boolean
   boxes: Box[]
@@ -34,31 +34,14 @@ interface SceneContentProps {
   isScaleDragging: boolean
 }
 
-// Collider wireframe visualization component (Physics 밖에서 렌더링)
-function ColliderWireframes({ spheres }: { spheres: Sphere[] }) {
-  // Voxel 기반 collider들 생성 (동일한 로직)
-  const boxColliders = useMemo(() => {
-    return generateVoxelColliders(initialPlanePositions, spheres, 0.3)
-  }, [spheres])
 
-  return (
-    <group>
-      {boxColliders.map((collider, index) => (
-        <mesh key={index} position={collider.position.toArray()}>
-          <boxGeometry args={collider.size.toArray()} />
-          <meshBasicMaterial color="#cccccc" wireframe />
-        </mesh>
-      ))}
-    </group>
-  )
-}
 
 function SceneContent({
-  spheres,
-  selectedSphere,
-  onSpherePositionChange,
-  onSphereScaleChange,
-  onSphereSelect,
+  shapes,
+  selectedShape,
+  onShapePositionChange,
+  onShapeScaleChange,
+  onShapeSelect,
   onScaleDragChange,
   collidersConfirmed,
   boxes,
@@ -107,20 +90,20 @@ function SceneContent({
       />
       
       {/* Collider wireframes (Physics 밖에서 렌더링) */}
-      {collidersConfirmed && showColliderWireframe && <ColliderWireframes spheres={spheres} />}
+      {collidersConfirmed && showColliderWireframe }
       
       <PhysicsScene>
         <SDFRoomTest 
-          spheres={spheres}
-          selectedSphere={selectedSphere}
-          onSpherePositionChange={onSpherePositionChange}
-          onSphereScaleChange={onSphereScaleChange}
-          onSphereSelect={onSphereSelect}
+          shapes={shapes}
+          selectedShape={selectedShape}
+          onShapePositionChange={onShapePositionChange}
+          onShapeScaleChange={onShapeScaleChange}
+          onShapeSelect={onShapeSelect}
           onScaleDragChange={onScaleDragChange}
           collidersConfirmed={collidersConfirmed}
         />
         
-        {collidersConfirmed && <RoomColliders spheres={spheres} />}
+        {collidersConfirmed && <RoomColliders spheres={shapes} />}
         
         {boxes.map((box) => (
           <DynamicBox
@@ -158,48 +141,48 @@ function SceneContent({
 }
 
 export default function App() {
-  const [spheres, setSpheres] = useState<Sphere[]>([])
-  const [selectedSphere, setSelectedSphere] = useState<string | null>(null)
+  const [shapes, setShapes] = useState<Shape[]>([])
+  const [selectedShape, setSelectedShape] = useState<string | null>(null)
   const [collidersConfirmed, setCollidersConfirmed] = useState(false)
   const [boxes, setBoxes] = useState<Box[]>([])
   const [showColliderWireframe, setShowColliderWireframe] = useState(true)
   const [isScaleDragging, setIsScaleDragging] = useState(false)
   
-  const handleAddSphere = () => {
-    if (spheres.length >= MAX_SPHERES) return
-    const newSphere = createSphere(`${spheres.length + 1}`)
-    setSpheres([...spheres, newSphere])
-    setSelectedSphere(newSphere.id)
+  const handleAddShape = (shapeType: ShapeType) => {
+    if (shapes.length >= MAX_SHAPES) return
+    const newShape = createShape(`${shapes.length + 1}`, shapeType)
+    setShapes([...shapes, newShape])
+    setSelectedShape(newShape.id)
   }
   
-  const handleDeleteSphere = (id: string) => {
-    setSpheres(spheres.filter(sphere => sphere.id !== id))
-    if (selectedSphere === id) {
-      setSelectedSphere(null)
+  const handleDeleteShape = (id: string) => {
+    setShapes(shapes.filter(shape => shape.id !== id))
+    if (selectedShape === id) {
+      setSelectedShape(null)
     }
   }
   
   const handleToggleOperation = (id: string) => {
-    setSpheres(spheres.map(sphere => 
-      sphere.id === id 
-        ? { ...sphere, operation: sphere.operation === 'union' ? 'subtract' : 'union' as const }
-        : sphere
+    setShapes(shapes.map(shape => 
+      shape.id === id 
+        ? { ...shape, operation: shape.operation === 'union' ? 'subtract' : 'union' as const }
+        : shape
     ))
   }
   
-  const handleSpherePositionChange = (id: string, newPosition: THREE.Vector3) => {
-    setSpheres(spheres.map(sphere => 
-      sphere.id === id 
-        ? { ...sphere, position: newPosition.clone() }
-        : sphere
+  const handleShapePositionChange = (id: string, newPosition: THREE.Vector3) => {
+    setShapes(shapes.map(shape => 
+      shape.id === id 
+        ? { ...shape, position: newPosition.clone() }
+        : shape
     ))
   }
   
-  const handleSphereScaleChange = (id: string, newScale: THREE.Vector3) => {
-    setSpheres(spheres.map(sphere => 
-      sphere.id === id 
-        ? { ...sphere, scale: newScale.clone() }
-        : sphere
+  const handleShapeScaleChange = (id: string, newScale: THREE.Vector3) => {
+    setShapes(shapes.map(shape => 
+      shape.id === id 
+        ? { ...shape, scale: newScale.clone() }
+        : shape
     ))
   }
   
@@ -224,11 +207,11 @@ export default function App() {
     <div className="w-full h-screen relative">
       <Canvas camera={{ position: [0, 50, 100], fov: 5 }} shadows>
         <SceneContent
-          spheres={spheres}
-          selectedSphere={selectedSphere}
-          onSpherePositionChange={handleSpherePositionChange}
-          onSphereScaleChange={handleSphereScaleChange}
-          onSphereSelect={setSelectedSphere}
+          shapes={shapes}
+          selectedShape={selectedShape}
+          onShapePositionChange={handleShapePositionChange}
+          onShapeScaleChange={handleShapeScaleChange}
+          onShapeSelect={setSelectedShape}
           onScaleDragChange={setIsScaleDragging}
           collidersConfirmed={collidersConfirmed}
           boxes={boxes}
@@ -239,9 +222,9 @@ export default function App() {
       
       {/* UI Overlay */}
       <UIControls
-        spheres={spheres}
-        onAddSphere={handleAddSphere}
-        onDeleteSphere={handleDeleteSphere}
+        shapes={shapes}
+        onAddShape={handleAddShape}
+        onDeleteShape={handleDeleteShape}
         onToggleOperation={handleToggleOperation}
         onConfirmColliders={handleConfirmColliders}
         onAddBox={handleAddBox}

@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
 import { useBox } from '@react-three/cannon'
 import * as THREE from 'three'
-import { Sphere } from '../assets/spheres'
+import { Shape } from '../assets/shapes'
 import { initialPlanePositions } from '../assets/walls'
 import { generateVoxelColliders } from './voxelizeColliders'
 
 interface RoomCollidersProps {
-  spheres: Sphere[]
+  spheres: Shape[]
 }
 
 export function RoomColliders({ spheres }: RoomCollidersProps) {

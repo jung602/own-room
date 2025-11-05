@@ -1,10 +1,10 @@
-import React from 'react'
-import { Sphere, MAX_SPHERES } from '../assets/spheres'
+import React, { useState } from 'react'
+import { Shape, MAX_SHAPES, ShapeType, shapeDisplayNames } from '../scene/assets/shapes'
 
 interface UIControlsProps {
-  spheres: Sphere[]
-  onAddSphere: () => void
-  onDeleteSphere: (id: string) => void
+  shapes: Shape[]
+  onAddShape: (shapeType: ShapeType) => void
+  onDeleteShape: (id: string) => void
   onToggleOperation: (id: string) => void
   onConfirmColliders?: () => void
   onAddBox?: () => void
@@ -14,9 +14,9 @@ interface UIControlsProps {
 }
 
 export function UIControls({
-  spheres,
-  onAddSphere,
-  onDeleteSphere,
+  shapes,
+  onAddShape,
+  onDeleteShape,
   onToggleOperation,
   onConfirmColliders,
   onAddBox,
@@ -24,36 +24,40 @@ export function UIControls({
   showColliderWireframe = true,
   onToggleColliderWireframe
 }: UIControlsProps) {
+  const [selectedShapeType, setSelectedShapeType] = useState<ShapeType>('sphere')
+  
+  const shapeTypes: ShapeType[] = ['sphere', 'box', 'torus', 'roundCone', 'capsule', 'cylinder']
+  
   return (
     <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-none">
       <div className="max-w-4xl mx-auto pointer-events-auto">
-        {/* Sphere List */}
-        {spheres.length > 0 && (
+        {/* Shape List */}
+        {shapes.length > 0 && (
           <div className="mb-4 space-y-2">
-            {spheres.map((sphere) => (
+            {shapes.map((shape) => (
               <div
-                key={sphere.id}
+                key={shape.id}
                 className="bg-gray-800/90 backdrop-blur-sm rounded-lg p-3 flex items-center justify-between"
               >
                 <span className="text-white font-medium">
-                  Sphere {sphere.id}
+                  {shapeDisplayNames[shape.shapeType]} {shape.id}
                 </span>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => onToggleOperation(sphere.id)}
+                    onClick={() => onToggleOperation(shape.id)}
                     disabled={collidersConfirmed}
                     className={`px-4 py-2 rounded-md font-medium transition-colors ${
                       collidersConfirmed
                         ? 'bg-gray-500 cursor-not-allowed text-gray-300'
-                        : sphere.operation === 'union'
+                        : shape.operation === 'union'
                         ? 'bg-green-500 hover:bg-green-600 text-white'
                         : 'bg-red-500 hover:bg-red-600 text-white'
                     }`}
                   >
-                    {sphere.operation === 'union' ? 'Union' : 'Subtract'}
+                    {shape.operation === 'union' ? 'Union' : 'Subtract'}
                   </button>
                   <button
-                    onClick={() => onDeleteSphere(sphere.id)}
+                    onClick={() => onDeleteShape(shape.id)}
                     disabled={collidersConfirmed}
                     className={`px-4 py-2 rounded-md font-medium transition-colors ${
                       collidersConfirmed
@@ -71,16 +75,34 @@ export function UIControls({
         
         {/* Control Buttons */}
         <div className="flex justify-center gap-3">
+          {/* Shape Type Selector */}
+          <select
+            value={selectedShapeType}
+            onChange={(e) => setSelectedShapeType(e.target.value as ShapeType)}
+            disabled={collidersConfirmed}
+            className={`px-4 py-3 rounded-lg font-medium transition-colors ${
+              collidersConfirmed
+                ? 'bg-gray-500 cursor-not-allowed text-gray-300'
+                : 'bg-gray-700 hover:bg-gray-600 text-white cursor-pointer'
+            }`}
+          >
+            {shapeTypes.map((type) => (
+              <option key={type} value={type}>
+                {shapeDisplayNames[type]}
+              </option>
+            ))}
+          </select>
+          
           <button
-            onClick={onAddSphere}
-            disabled={spheres.length >= MAX_SPHERES || collidersConfirmed}
+            onClick={() => onAddShape(selectedShapeType)}
+            disabled={shapes.length >= MAX_SHAPES || collidersConfirmed}
             className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-              spheres.length >= MAX_SPHERES || collidersConfirmed
+              shapes.length >= MAX_SHAPES || collidersConfirmed
                 ? 'bg-gray-500 cursor-not-allowed text-gray-300'
                 : 'bg-blue-500 hover:bg-blue-600 text-white'
             }`}
           >
-            Add Sphere {spheres.length >= MAX_SPHERES ? '(Max Reached)' : collidersConfirmed ? '(Locked)' : ''}
+            Add Shape {shapes.length >= MAX_SHAPES ? '(Max Reached)' : collidersConfirmed ? '(Locked)' : ''}
           </button>
           
           {onConfirmColliders && (
@@ -111,18 +133,6 @@ export function UIControls({
             </button>
           )}
           
-          {onToggleColliderWireframe && collidersConfirmed && (
-            <button
-              onClick={onToggleColliderWireframe}
-              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                showColliderWireframe
-                  ? 'bg-cyan-500 hover:bg-cyan-600 text-white'
-                  : 'bg-gray-600 hover:bg-gray-700 text-white'
-              }`}
-            >
-              {showColliderWireframe ? 'Hide Colliders' : 'Show Colliders'}
-            </button>
-          )}
         </div>
       </div>
     </div>

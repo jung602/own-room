@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { Sphere } from '../assets/spheres'
+import { Shape } from '../assets/shapes'
 import { ROOM_SIZE, WALL_THICKNESS, BLEND_STRENGTH } from '../assets/walls'
 
 // SDF 함수들 (셰이더와 동일)
@@ -15,7 +15,6 @@ function sdRoundBox(p: THREE.Vector3, b: THREE.Vector3, r: number): number {
 }
 
 function sdSphere(p: THREE.Vector3, r: number, scale: THREE.Vector3): number {
-  // 비균일 스케일 적용 (shader와 동일한 로직)
   const scaledP = new THREE.Vector3(
     p.x / scale.x,
     p.y / scale.y,
@@ -23,6 +22,94 @@ function sdSphere(p: THREE.Vector3, r: number, scale: THREE.Vector3): number {
   )
   const minScale = Math.min(scale.x, Math.min(scale.y, scale.z))
   return (scaledP.length() - r) * minScale
+}
+
+function sdBox(p: THREE.Vector3, b: THREE.Vector3, scale: THREE.Vector3): number {
+  const scaledP = new THREE.Vector3(
+    p.x / scale.x,
+    p.y / scale.y,
+    p.z / scale.z
+  )
+  const d = new THREE.Vector3(
+    Math.abs(scaledP.x) - b.x,
+    Math.abs(scaledP.y) - b.y,
+    Math.abs(scaledP.z) - b.z
+  )
+  const maxD = Math.max(d.x, Math.max(d.y, d.z))
+  const maxVec = new THREE.Vector3(Math.max(d.x, 0), Math.max(d.y, 0), Math.max(d.z, 0))
+  const roundRadius = Math.min(b.x, Math.min(b.y, b.z)) * 0.4 // 10% of smallest dimension
+  const minScale = Math.min(scale.x, Math.min(scale.y, scale.z))
+  return (Math.min(maxD, 0.0) + maxVec.length() - roundRadius) * minScale
+}
+
+function sdTorus(p: THREE.Vector3, t: THREE.Vector2, scale: THREE.Vector3): number {
+  const scaledP = new THREE.Vector3(
+    p.x / scale.x,
+    p.y / scale.y,
+    p.z / scale.z
+  )
+  const q = new THREE.Vector2(
+    Math.sqrt(scaledP.x * scaledP.x + scaledP.z * scaledP.z) - t.x,
+    scaledP.y
+  )
+  const minScale = Math.min(scale.x, Math.min(scale.y, scale.z))
+  return (q.length() - t.y) * minScale
+}
+
+function sdRoundCone(p: THREE.Vector3, r1: number, r2: number, h: number, scale: THREE.Vector3): number {
+  const scaledP = new THREE.Vector3(
+    p.x / scale.x,
+    p.y / scale.y,
+    p.z / scale.z
+  )
+  const q = new THREE.Vector2(
+    Math.sqrt(scaledP.x * scaledP.x + scaledP.z * scaledP.z),
+    scaledP.y
+  )
+  const b = (r1 - r2) / h
+  const a = Math.sqrt(1.0 - b * b)
+  const k = q.dot(new THREE.Vector2(-b, a))
+  const roundRadius = Math.min(r1, r2) * 0.1 // 10% of smaller radius
+  
+  let result: number
+  if (k < 0.0) {
+    result = q.length() - r1 - roundRadius
+  } else if (k > a * h) {
+    result = q.distanceTo(new THREE.Vector2(0, h)) - r2 - roundRadius
+  } else {
+    result = q.dot(new THREE.Vector2(a, b)) - r1 - roundRadius
+  }
+  const minScale = Math.min(scale.x, Math.min(scale.y, scale.z))
+  return result * minScale
+}
+
+function sdCapsule(p: THREE.Vector3, h: number, r: number, scale: THREE.Vector3): number {
+  const scaledP = new THREE.Vector3(
+    p.x / scale.x,
+    p.y / scale.y,
+    p.z / scale.z
+  )
+  const clampedY = Math.max(0, Math.min(scaledP.y, h))
+  scaledP.y -= clampedY
+  const minScale = Math.min(scale.x, Math.min(scale.y, scale.z))
+  return (scaledP.length() - r) * minScale
+}
+
+function sdCylinder(p: THREE.Vector3, h: number, r: number, scale: THREE.Vector3): number {
+  const scaledP = new THREE.Vector3(
+    p.x / scale.x,
+    p.y / scale.y,
+    p.z / scale.z
+  )
+  const d = new THREE.Vector2(
+    Math.abs(Math.sqrt(scaledP.x * scaledP.x + scaledP.z * scaledP.z)) - r,
+    Math.abs(scaledP.y) - h
+  )
+  const maxD = Math.max(d.x, d.y)
+  const maxVec = new THREE.Vector2(Math.max(d.x, 0), Math.max(d.y, 0))
+  const roundRadius = Math.min(r, h) * 0.4 // 10% of smaller dimension
+  const minScale = Math.min(scale.x, Math.min(scale.y, scale.z))
+  return (Math.min(maxD, 0.0) + maxVec.length() - roundRadius) * minScale
 }
 
 function opSmoothUnion(d1: number, d2: number, k: number): number {
@@ -43,7 +130,7 @@ function opSmoothSubtraction(d1: number, d2: number, k: number): number {
 export function calculateSceneSDF(
   pos: THREE.Vector3,
   wallPositions: THREE.Vector3[],
-  spheres: Sphere[]
+  shapes: Shape[]
 ): number {
   const k = BLEND_STRENGTH
   const thickness = WALL_THICKNESS
@@ -77,15 +164,39 @@ export function calculateSceneSDF(
   d = opSmoothUnion(d, leftWall, k)
   d = opSmoothUnion(d, rightWall, k)
 
-  // Sphere 추가 (scale 적용)
-  for (const sphere of spheres) {
-    const sphereP = pos.clone().sub(sphere.position)
-    const sphereDist = sdSphere(sphereP, sphere.radius, sphere.scale)
+  // Shape 추가 (scale 적용)
+  for (const shape of shapes) {
+    const shapeP = pos.clone().sub(shape.position)
+    let shapeDist: number
+    
+    // Select SDF based on shape type
+    switch (shape.shapeType) {
+      case 'sphere':
+        shapeDist = sdSphere(shapeP, shape.radius, shape.scale)
+        break
+      case 'box':
+        shapeDist = sdBox(shapeP, new THREE.Vector3(shape.radius, shape.radius, shape.radius), shape.scale)
+        break
+      case 'torus':
+        shapeDist = sdTorus(shapeP, new THREE.Vector2(shape.radius, shape.radius * 0.5), shape.scale)
+        break
+      case 'roundCone':
+        shapeDist = sdRoundCone(shapeP, shape.radius, shape.radius * 0.5, shape.radius * 2, shape.scale)
+        break
+      case 'capsule':
+        shapeDist = sdCapsule(shapeP, shape.radius * 2, shape.radius * 0.5, shape.scale)
+        break
+      case 'cylinder':
+        shapeDist = sdCylinder(shapeP, shape.radius, shape.radius * 0.8, shape.scale)
+        break
+      default:
+        shapeDist = sdSphere(shapeP, shape.radius, shape.scale)
+    }
 
-    if (sphere.operation === 'union') {
-      d = opSmoothUnion(d, sphereDist, k)
+    if (shape.operation === 'union') {
+      d = opSmoothUnion(d, shapeDist, k)
     } else {
-      d = opSmoothSubtraction(sphereDist, d, k)
+      d = opSmoothSubtraction(shapeDist, d, k)
     }
   }
 
@@ -100,7 +211,7 @@ interface BoxCollider {
 // Voxel 기반 collider 생성
 export function generateVoxelColliders(
   wallPositions: THREE.Vector3[],
-  spheres: Sphere[],
+  shapes: Shape[],
   voxelSize: number = 0.2
 ): BoxCollider[] {
   const colliders: BoxCollider[] = []
@@ -134,7 +245,7 @@ export function generateVoxelColliders(
           bounds.min.z + z * voxelSize + voxelSize * 0.5
         )
         
-        const sdf = calculateSceneSDF(worldPos, wallPositions, spheres)
+        const sdf = calculateSceneSDF(worldPos, wallPositions, shapes)
         voxels[x][y][z] = sdf < sdfThreshold // 표면 근처의 내부만 true
       }
     }

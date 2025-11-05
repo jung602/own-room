@@ -1,4 +1,6 @@
 import * as THREE from 'three'
+import { smoothUnionCode, smoothSubtractionCode } from './smooth'
+import { allShapeSDFCode } from './shapes'
 
 // Room 상수들
 export const ROOM_SIZE = 2.0          // 방 크기
@@ -53,12 +55,13 @@ export const wallFragmentShader = `
   uniform sampler2D uTexture;
   uniform float uTexRepeat;
   
-  // Sphere uniforms
-  uniform int uSphereCount;
-  uniform vec3 uSpherePositions[10];
-  uniform float uSphereRadii[10];
-  uniform vec3 uSphereScales[10];
-  uniform float uSphereOperations[10]; // 0.0 = union, 1.0 = subtract
+  // Shape uniforms
+  uniform int uShapeCount;
+  uniform vec3 uShapePositions[10];
+  uniform float uShapeRadii[10];
+  uniform vec3 uShapeScales[10];
+  uniform float uShapeOperations[10]; // 0.0 = union, 1.0 = subtract
+  uniform float uShapeTypes[10]; // 0=sphere, 1=box, 2=torus, 3=roundCone, 4=capsule, 5=cylinder
   
   varying vec3 vWorldPos;
   varying vec3 vViewDir;
@@ -76,28 +79,16 @@ export const wallFragmentShader = `
     return min(max(d.x, max(d.y, d.z)), 0.0) + length(max(d, 0.0));
   }
   
-  // SDF for sphere with non-uniform scale
-  float sdSphere(vec3 p, float r, vec3 scale) {
-    vec3 scaledP = p / scale;
-    return (length(scaledP) - r) * min(min(scale.x, scale.y), scale.z);
-  }
-  
   // Simple Union (without blending)
   float opUnion(float d1, float d2) {
     return min(d1, d2);
   }
   
-  // Smooth Union
-  float opSmoothUnion(float d1, float d2, float k) {
-    float h = max(k - abs(d1 - d2), 0.0) / k;
-    return min(d1, d2) - h * h * k * 0.25;
-  }
+  ${smoothUnionCode}
   
-  // Smooth Subtraction
-  float opSmoothSubtraction(float d1, float d2, float k) {
-    float h = clamp(0.5 - 0.5 * (d2 + d1) / k, 0.0, 1.0);
-    return mix(d2, -d1, h) + k * h * (1.0 - h);
-  }
+  ${smoothSubtractionCode}
+  
+  ${allShapeSDFCode}
   
   // Masking boxes map (바깥쪽 마스킹 박스들만 - 벽/바닥과 분리)
   float mapMaskingBoxes(vec3 pos) {
@@ -185,20 +176,45 @@ export const wallFragmentShader = `
     // 먼저 벽/바닥만 저장
     float walls = d;
     
-    // Add spheres
+    // Add shapes
     for(int i = 0; i < 10; i++) {
-      if(i >= uSphereCount) break;
+      if(i >= uShapeCount) break;
       
-      vec3 sphereP = pos - uSpherePositions[i];
-      float sphere = sdSphere(sphereP, uSphereRadii[i], uSphereScales[i]);
+      vec3 shapeP = pos - uShapePositions[i];
+      float shapeDist;
+      
+      // Select SDF based on shape type
+      int shapeType = int(uShapeTypes[i]);
+      if(shapeType == 0) {
+        // Sphere
+        shapeDist = sdSphere(shapeP, uShapeRadii[i], uShapeScales[i]);
+      } else if(shapeType == 1) {
+        // Box
+        shapeDist = sdBox(shapeP, vec3(uShapeRadii[i]), uShapeScales[i]);
+      } else if(shapeType == 2) {
+        // Torus
+        shapeDist = sdTorus(shapeP, vec2(uShapeRadii[i], uShapeRadii[i] * 0.5), uShapeScales[i]);
+      } else if(shapeType == 3) {
+        // Round Cone
+        shapeDist = sdRoundCone(shapeP, uShapeRadii[i], uShapeRadii[i] * 0.5, uShapeRadii[i] * 2.0, uShapeScales[i]);
+      } else if(shapeType == 4) {
+        // Capsule
+        shapeDist = sdCapsule(shapeP, uShapeRadii[i] * 2.0, uShapeRadii[i] * 0.5, uShapeScales[i]);
+      } else if(shapeType == 5) {
+        // Cylinder
+        shapeDist = sdCylinder(shapeP, uShapeRadii[i], uShapeRadii[i] * 0.8, uShapeScales[i]);
+      } else {
+        // Default to sphere if unknown type
+        shapeDist = sdSphere(shapeP, uShapeRadii[i], uShapeScales[i]);
+      }
       
       // Check operation: 0.0 = union, 1.0 = subtract
-      if(uSphereOperations[i] < 0.5) {
+      if(uShapeOperations[i] < 0.5) {
         // Union
-        d = opSmoothUnion(d, sphere, k);
+        d = opSmoothUnion(d, shapeDist, k);
       } else {
         // Subtract
-        d = opSmoothSubtraction(sphere, d, k);
+        d = opSmoothSubtraction(shapeDist, d, k);
       }
     }
     

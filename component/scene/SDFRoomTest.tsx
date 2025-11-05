@@ -4,20 +4,20 @@ import { useTexture, TransformControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { calculateWallVisibility } from './utils/cameraFacingUtil'
 import { initialPlanePositions, wallVertexShader, wallFragmentShader } from './assets/walls'
-import { Sphere, MAX_SPHERES, DEFAULT_SPHERE_RADIUS } from './assets/spheres'
+import { Shape, MAX_SHAPES, DEFAULT_SHAPE_RADIUS, shapeTypeToNumber } from './assets/shapes'
 
 interface SDFRoomTestProps {
-  spheres: Sphere[]
-  selectedSphere: string | null
-  onSpherePositionChange: (id: string, position: THREE.Vector3) => void
-  onSphereScaleChange: (id: string, scale: THREE.Vector3) => void
-  onSphereSelect: (id: string | null) => void
+  shapes: Shape[]
+  selectedShape: string | null
+  onShapePositionChange: (id: string, position: THREE.Vector3) => void
+  onShapeScaleChange: (id: string, scale: THREE.Vector3) => void
+  onShapeSelect: (id: string | null) => void
   onScaleDragChange: (isDragging: boolean) => void
   collidersConfirmed?: boolean
 }
 
-interface SphereVisualizationProps {
-  sphere: Sphere
+interface ShapeVisualizationProps {
+  shape: Shape
   isSelected: boolean
   onSelect: () => void
   onPositionChange: (position: THREE.Vector3) => void
@@ -26,7 +26,7 @@ interface SphereVisualizationProps {
   collidersConfirmed: boolean
 }
 
-function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, onScaleChange, onScaleDragChange, collidersConfirmed }: SphereVisualizationProps) {
+function ShapeVisualization({ shape, isSelected, onSelect, onPositionChange, onScaleChange, onScaleDragChange, collidersConfirmed }: ShapeVisualizationProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   const [isDraggingScale, setIsDraggingScale] = useState(false)
   const dragStartPos = useRef<THREE.Vector3 | null>(null)
@@ -37,16 +37,16 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, o
   // Position 동기화: TransformControls가 드래그 중이 아닐 때만 업데이트
   useEffect(() => {
     if (meshRef.current && !isTransformDragging.current) {
-      meshRef.current.position.copy(sphere.position)
+      meshRef.current.position.copy(shape.position)
     }
-  }, [sphere.position])
+  }, [shape.position])
   
   const handleScaleHandlePointerDown = (e: any, axis: 'x' | 'y' | 'uniform') => {
     e.stopPropagation()
     // 즉시 TransformControls 비활성화
     setIsDraggingScale(true)
     dragAxis.current = axis
-    dragStartScale.current = sphere.scale.clone()
+    dragStartScale.current = shape.scale.clone()
     onScaleDragChange(true) // OrbitControls 비활성화
     
     // 추가 이벤트 전파 차단
@@ -62,7 +62,7 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, o
     const deltaX = e.movementX * 0.01
     const deltaY = -e.movementY * 0.01
     
-    let newScale = sphere.scale.clone()
+    let newScale = shape.scale.clone()
     
     if (dragAxis.current === 'x') {
       newScale.x = Math.max(0.1, newScale.x + deltaX)
@@ -97,11 +97,31 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, o
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSelected, collidersConfirmed, sphere.scale, isDraggingScale])
+  }, [isSelected, collidersConfirmed, shape.scale, isDraggingScale])
   
-  // Calculate handle positions based on sphere radius and scale
+  // Calculate handle positions based on shape radius and scale
   const handleSize = 0.1
-  const handleDistance = sphere.radius * 1.2
+  const handleDistance = shape.radius * 1.2
+  
+  // Get geometry based on shape type
+  const getGeometry = () => {
+    switch (shape.shapeType) {
+      case 'sphere':
+        return <sphereGeometry args={[shape.radius, 32, 32]} />
+      case 'box':
+        return <boxGeometry args={[shape.radius * 2, shape.radius * 2, shape.radius * 2]} />
+      case 'torus':
+        return <torusGeometry args={[shape.radius, shape.radius * 0.5, 16, 32]} />
+      case 'roundCone':
+        return <coneGeometry args={[shape.radius, shape.radius * 2, 32]} />
+      case 'capsule':
+        return <capsuleGeometry args={[shape.radius * 0.5, shape.radius * 2, 16, 32]} />
+      case 'cylinder':
+        return <cylinderGeometry args={[shape.radius * 0.8, shape.radius * 0.8, shape.radius * 2, 32]} />
+      default:
+        return <sphereGeometry args={[shape.radius, 32, 32]} />
+    }
+  }
   
   return (
     <group>
@@ -116,7 +136,7 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, o
         }}
         visible={false}
       >
-        <sphereGeometry args={[sphere.radius, 32, 32]} />
+        {getGeometry()}
       </mesh>
       
       {isSelected && meshRef.current && !collidersConfirmed && (
@@ -141,9 +161,9 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, o
           {/* X-axis scale handle (red, right) */}
           <mesh
             position={[
-              sphere.position.x + handleDistance * sphere.scale.x,
-              sphere.position.y,
-              sphere.position.z
+              shape.position.x + handleDistance * shape.scale.x,
+              shape.position.y,
+              shape.position.z
             ]}
             onPointerDown={(e) => {
               e.stopPropagation()
@@ -157,9 +177,9 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, o
           {/* Y-axis scale handle (green, top) */}
           <mesh
             position={[
-              sphere.position.x,
-              sphere.position.y + handleDistance * sphere.scale.y,
-              sphere.position.z
+              shape.position.x,
+              shape.position.y + handleDistance * shape.scale.y,
+              shape.position.z
             ]}
             onPointerDown={(e) => {
               e.stopPropagation()
@@ -173,9 +193,9 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, o
           {/* Uniform scale handle (yellow, diagonal) */}
           <mesh
             position={[
-              sphere.position.x + handleDistance * sphere.scale.x * 0.707,
-              sphere.position.y + handleDistance * sphere.scale.y * 0.707,
-              sphere.position.z + handleDistance * sphere.scale.z * 0.707
+              shape.position.x + handleDistance * shape.scale.x * 0.707,
+              shape.position.y + handleDistance * shape.scale.y * 0.707,
+              shape.position.z + handleDistance * shape.scale.z * 0.707
             ]}
             onPointerDown={(e) => {
               e.stopPropagation()
@@ -192,11 +212,11 @@ function SphereVisualization({ sphere, isSelected, onSelect, onPositionChange, o
 }
 
 export function SDFRoomTest({ 
-  spheres, 
-  selectedSphere,
-  onSpherePositionChange,
-  onSphereScaleChange,
-  onSphereSelect,
+  shapes, 
+  selectedShape,
+  onShapePositionChange,
+  onShapeScaleChange,
+  onShapeSelect,
   onScaleDragChange,
   collidersConfirmed = false
 }: SDFRoomTestProps) {
@@ -213,11 +233,12 @@ export function SDFRoomTest({
   cementTexture.repeat.set(12, 12)
   
   const material = useMemo(() => {
-    // Initialize sphere arrays with default values
-    const spherePositions = Array(MAX_SPHERES).fill(null).map(() => new THREE.Vector3(0, 0, 0))
-    const sphereRadii = Array(MAX_SPHERES).fill(DEFAULT_SPHERE_RADIUS)
-    const sphereScales = Array(MAX_SPHERES).fill(null).map(() => new THREE.Vector3(1, 1, 1))
-    const sphereOperations = Array(MAX_SPHERES).fill(0.0) // 0.0 = union
+    // Initialize shape arrays with default values
+    const shapePositions = Array(MAX_SHAPES).fill(null).map(() => new THREE.Vector3(0, 0, 0))
+    const shapeRadii = Array(MAX_SHAPES).fill(DEFAULT_SHAPE_RADIUS)
+    const shapeScales = Array(MAX_SHAPES).fill(null).map(() => new THREE.Vector3(1, 1, 1))
+    const shapeOperations = Array(MAX_SHAPES).fill(0.0) // 0.0 = union
+    const shapeTypes = Array(MAX_SHAPES).fill(0.0) // 0.0 = sphere
     
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -243,12 +264,13 @@ export function SDFRoomTest({
         // 텍스쳐 관련
         uTexture: { value: cementTexture },
         uTexRepeat: { value: 2.0 },
-        // Sphere 관련
-        uSphereCount: { value: 0 },
-        uSpherePositions: { value: spherePositions },
-        uSphereRadii: { value: sphereRadii },
-        uSphereScales: { value: sphereScales },
-        uSphereOperations: { value: sphereOperations },
+        // Shape 관련
+        uShapeCount: { value: 0 },
+        uShapePositions: { value: shapePositions },
+        uShapeRadii: { value: shapeRadii },
+        uShapeScales: { value: shapeScales },
+        uShapeOperations: { value: shapeOperations },
+        uShapeTypes: { value: shapeTypes },
       },
       transparent: true,
       vertexShader: wallVertexShader,
@@ -286,14 +308,15 @@ export function SDFRoomTest({
       material.uniforms.uLeftWallVisible.value = visibility.leftWall ? 1.0 : 0.0
       material.uniforms.uRightWallVisible.value = visibility.rightWall ? 1.0 : 0.0
       
-      // Sphere 데이터를 uniform에 업데이트
-      material.uniforms.uSphereCount.value = spheres.length
-      spheres.forEach((sphere, index) => {
-        if (index < MAX_SPHERES) {
-          material.uniforms.uSpherePositions.value[index].copy(sphere.position)
-          material.uniforms.uSphereRadii.value[index] = sphere.radius
-          material.uniforms.uSphereScales.value[index].copy(sphere.scale)
-          material.uniforms.uSphereOperations.value[index] = sphere.operation === 'union' ? 0.0 : 1.0
+      // Shape 데이터를 uniform에 업데이트
+      material.uniforms.uShapeCount.value = shapes.length
+      shapes.forEach((shape, index) => {
+        if (index < MAX_SHAPES) {
+          material.uniforms.uShapePositions.value[index].copy(shape.position)
+          material.uniforms.uShapeRadii.value[index] = shape.radius
+          material.uniforms.uShapeScales.value[index].copy(shape.scale)
+          material.uniforms.uShapeOperations.value[index] = shape.operation === 'union' ? 0.0 : 1.0
+          material.uniforms.uShapeTypes.value[index] = shapeTypeToNumber(shape.shapeType)
         }
       })
     }
@@ -305,15 +328,15 @@ export function SDFRoomTest({
         <boxGeometry args={[100, 100, 100]} />
       </mesh>
       
-      {/* Render visible spheres with TransformControls */}
-      {spheres.map((sphere) => (
-        <SphereVisualization
-          key={sphere.id}
-          sphere={sphere}
-          isSelected={selectedSphere === sphere.id}
-          onSelect={() => onSphereSelect(sphere.id)}
-          onPositionChange={(pos) => onSpherePositionChange(sphere.id, pos)}
-          onScaleChange={(scale) => onSphereScaleChange(sphere.id, scale)}
+      {/* Render visible shapes with TransformControls */}
+      {shapes.map((shape) => (
+        <ShapeVisualization
+          key={shape.id}
+          shape={shape}
+          isSelected={selectedShape === shape.id}
+          onSelect={() => onShapeSelect(shape.id)}
+          onPositionChange={(pos) => onShapePositionChange(shape.id, pos)}
+          onScaleChange={(scale) => onShapeScaleChange(shape.id, scale)}
           onScaleDragChange={onScaleDragChange}
           collidersConfirmed={collidersConfirmed}
         />
